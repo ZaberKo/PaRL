@@ -43,4 +43,4 @@ class SquashedGaussian(TorchSquashedGaussian):
         log_prob = log_prob_gaussian - torch.sum(
             2*np.log(2)-z-F.softplus(-2*z), 
             dim=-1)
-        return 
+        return actions, log_prob

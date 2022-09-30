@@ -8,12 +8,12 @@ from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
 
-ray.init(num_cpus=17, num_gpus=1, local_mode=False, include_dashboard=True)
+ray.init(num_cpus=17*3, num_gpus=1, local_mode=False, include_dashboard=True)
 
 config = SACConfig().framework('torch') \
     .rollouts(num_rollout_workers=0, num_envs_per_worker=1,no_done_at_end=True,horizon=1000,soft_horizon=False)\
     .training(
-        initial_alpha=0.2,
+        initial_alpha=1,
         replay_buffer_config={
         "_enable_replay_buffer_api": True,
         "type": "MultiAgentReplayBuffer",
@@ -23,7 +23,7 @@ config = SACConfig().framework('torch') \
     })\
     .resources(num_gpus=0.1)\
     .evaluation(
-        evaluation_interval=5, 
+        evaluation_interval=10, 
         evaluation_num_workers=16, 
         evaluation_duration=16,
         evaluation_config={
@@ -32,7 +32,8 @@ config = SACConfig().framework('torch') \
     })\
     .reporting(
         min_time_s_per_iteration=None,
-        min_sample_timesteps_per_iteration=1000 # 1000 updates per iteration
+        min_sample_timesteps_per_iteration=1000, # 1000 updates per iteration
+        metrics_num_episodes_for_smoothing=5
         ) \
     .environment(env="HalfCheetah-v3")\
     .to_dict()
