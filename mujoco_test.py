@@ -34,13 +34,13 @@ config = SACConfig().framework('torch') \
     .environment(env="HalfCheetah-v3")\
     .to_dict()
 
-class MySAC(SAC):
+class SAC_TuneAlpha(SAC):
     def get_default_policy_class(
         self, config):
         return SACPolicy
 
 result_grid = Tuner(
-    MySAC,
+    SAC_TuneAlpha,
     param_space=config,
     tune_config=TuneConfig(
         num_samples=2

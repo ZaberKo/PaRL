@@ -6,7 +6,7 @@ from ray.rllib.algorithms.sac import SAC, SACConfig
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
-from policy import SACPolicy,SACPolicy_FixedAlpha
+from policy import SACPolicy
 
 ray.init(num_cpus=17*3, num_gpus=1, local_mode=False, include_dashboard=True)
 
@@ -43,7 +43,7 @@ config = SACConfig().framework('torch') \
 class MySAC(SAC):
     def get_default_policy_class(
         self, config):
-        return SACPolicy_FixedAlpha
+        return SACPolicy
 
 result_grid = Tuner(
     MySAC,
@@ -55,7 +55,7 @@ result_grid = Tuner(
         stop={"training_iteration": 1000}, # this will results in 1e6 updates
         checkpoint_config=CheckpointConfig(
             num_to_keep=None,  # save all checkpoints
-            checkpoint_frequency=10
+            checkpoint_frequency=100
         )
     )
 ).fit()

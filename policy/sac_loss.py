@@ -37,8 +37,8 @@ def actor_critic_loss_fix(
             of loss tensors.
     """
     # # force limit the minimum of log_alpha
-    # with torch.no_grad():
-    #     model.log_alpha.clamp_(min=-2)
+    with torch.no_grad():
+        model.log_alpha.clamp_(min=-5)
 
 
     # Look up the target model (tower) using the model tower.
