@@ -27,8 +27,8 @@ class SquashedGaussian(TorchSquashedGaussian):
             unsquashed_values), -100, 100).sum(dim=-1)
 
         # Note: use magic code from Spinning-up repo
-        log_prob = log_prob_gaussian - torch.sum(
-            2*np.log(2)-unsquashed_values-F.softplus(-2*unsquashed_values), 
+        log_prob = log_prob_gaussian - 2*torch.sum(
+            np.log(2)-unsquashed_values-F.softplus(-2*unsquashed_values), 
             dim=-1)
         return log_prob
 
