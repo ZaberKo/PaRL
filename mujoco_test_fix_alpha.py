@@ -53,7 +53,7 @@ result_grid = Tuner(
     SAC_FixAlpha,
     param_space=config,
     tune_config=TuneConfig(
-        num_samples=num_test
+        num_samples=num_tests
     ),
     run_config=RunConfig(
         stop={"training_iteration": 1000}, # this will results in 1e6 updates

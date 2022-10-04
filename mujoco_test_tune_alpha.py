@@ -52,9 +52,10 @@ result_grid = Tuner(
     SAC_TuneAlpha,
     param_space=config,
     tune_config=TuneConfig(
-        num_samples=3
+        num_samples=num_tests
     ),
     run_config=RunConfig(
+        local_dir="~/workspace/PaRL_exp",
         stop={"training_iteration": 1000}, # this will results in 1e6 updates
         checkpoint_config=CheckpointConfig(
             num_to_keep=None,  # save all checkpoints
