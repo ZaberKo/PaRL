@@ -8,10 +8,11 @@ from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
 
-num_test=4
+num_tests=4
+num_eval_workers=16
 
 
-ray.init(num_cpus=17*num_test, num_gpus=1, local_mode=False, include_dashboard=True)
+ray.init(num_cpus=(num_eval_workers+1)*num_tests, num_gpus=1, local_mode=False, include_dashboard=True)
 
 config = SACConfig().framework('torch') \
     .rollouts(num_rollout_workers=0, num_envs_per_worker=1,no_done_at_end=True,horizon=1000,soft_horizon=False)\
@@ -27,8 +28,8 @@ config = SACConfig().framework('torch') \
     .resources(num_gpus=0.1)\
     .evaluation(
         evaluation_interval=10, 
-        evaluation_num_workers=16, 
-        evaluation_duration=16,
+        evaluation_num_workers=num_eval_workers, 
+        evaluation_duration=num_eval_workers*1,
         evaluation_config={
             "no_done_at_end":False,
             "horizon":None
