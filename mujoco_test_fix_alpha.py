@@ -1,7 +1,8 @@
 # %%
 import gym
 import ray
-from ray.rllib.algorithms.sac import SAC, SACConfig
+from ray.rllib.algorithms.sac import SACConfig
+from sac import SAC_Parallel
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
@@ -44,7 +45,7 @@ config = SACConfig().framework('torch') \
 
     
 
-class SAC_FixAlpha(SAC):
+class SAC_FixAlpha(SAC_Parallel):
     def get_default_policy_class(
         self, config):
         return SACPolicy_FixedAlpha
