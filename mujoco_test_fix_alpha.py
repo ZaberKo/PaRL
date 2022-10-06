@@ -35,7 +35,7 @@ config = SACConfig().framework('torch') \
             "horizon":None
     })\
     .reporting(
-        min_time_s_per_iteration=None,
+        min_time_s_per_iteration=0,
         min_sample_timesteps_per_iteration=1000, # 1000 updates per iteration
         metrics_num_episodes_for_smoothing=5
         ) \
