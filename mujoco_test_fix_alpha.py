@@ -57,6 +57,7 @@ result_grid = Tuner(
         num_samples=num_tests
     ),
     run_config=RunConfig(
+        local_dir="~/ray_results",
         stop={"training_iteration": 1000}, # this will results in 1e6 updates
         checkpoint_config=CheckpointConfig(
             num_to_keep=None,  # save all checkpoints
