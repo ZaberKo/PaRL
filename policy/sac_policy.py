@@ -22,7 +22,7 @@ from ray.rllib.utils.torch_utils import (
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
-from .sac_policy_mixin import SACEvolveMixin
+from .sac_policy_mixin import SACEvolveMixin, learn_on_loaded_batch
 from .action_dist import SquashedGaussian
 from .sac_loss import actor_critic_loss_fix,actor_critic_loss_no_alpha
 
@@ -197,3 +197,8 @@ SACPolicy_FixedAlpha = build_policy_class(
     mixins=[TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
 )
+
+
+# fix record grad_info
+SACPolicy.learn_on_loaded_batch=learn_on_loaded_batch
+SACPolicy_FixedAlpha.learn_on_loaded_batch=learn_on_loaded_batch

@@ -11,9 +11,9 @@ from ray.air import RunConfig, CheckpointConfig
 from policy import SACPolicy,SACPolicy_FixedAlpha
 
 
-num_test=1
+num_test=3
 
-num_rollout_workers=8
+num_rollout_workers=0
 num_envs_per_worker=5
 
 rollout_vs_train=1
@@ -44,7 +44,8 @@ config = SACConfig().framework('torch') \
         evaluation_duration=16,
         evaluation_config={
             "no_done_at_end":False,
-            "horizon":None
+            "horizon":None,
+            "num_envs_per_worker": 1
     })\
     .reporting(
         min_time_s_per_iteration=0,
@@ -63,7 +64,7 @@ class SAC_FixAlpha_Parallel(SAC_Parallel):
 # calculate_rr_weights(config)
 #%%
 
-ray.init(num_cpus=(8+1+16)*num_test, num_gpus=1, local_mode=False, include_dashboard=True)
+ray.init(num_cpus=(num_rollout_workers+1+16)*num_test, num_gpus=1, local_mode=False, include_dashboard=True)
 result_grid = Tuner(
     SAC_FixAlpha_Parallel,
     param_space=config,

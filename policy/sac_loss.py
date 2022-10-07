@@ -36,9 +36,9 @@ def actor_critic_loss_fix(
         Union[TensorType, List[TensorType]]: A single loss tensor or a list
             of loss tensors.
     """
-    # # force limit the minimum of log_alpha
-    # with torch.no_grad():
-    #     model.log_alpha.clamp_(min=-5)
+    # force limit the log_alpha for numerical stabilization
+    with torch.no_grad():
+        model.log_alpha.clamp_(min=-20,max=2)
 
 
     # Look up the target model (tower) using the model tower.

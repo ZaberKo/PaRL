@@ -9,7 +9,7 @@ from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
 
-num_tests=4
+num_tests=3
 num_eval_workers=16
 
 
@@ -18,7 +18,8 @@ ray.init(num_cpus=(num_eval_workers+1)*num_tests, num_gpus=1, local_mode=False, 
 config = SACConfig().framework('torch') \
     .rollouts(num_rollout_workers=0, num_envs_per_worker=1,no_done_at_end=True,horizon=1000,soft_horizon=False)\
     .training(
-        initial_alpha=1,
+        initial_alpha=0.2,
+        grad_clip=40,
         replay_buffer_config={
         "_enable_replay_buffer_api": True,
         "type": "MultiAgentReplayBuffer",

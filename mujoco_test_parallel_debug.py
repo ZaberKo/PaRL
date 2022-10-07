@@ -16,8 +16,8 @@ from tqdm import trange
 
 num_test=1
 
-num_rollout_workers=8
-num_envs_per_worker=5
+num_rollout_workers=0
+num_envs_per_worker=4
 
 rollout_vs_train=1
 
@@ -30,6 +30,7 @@ config = SACConfig().framework('torch') \
         horizon=1000,
         soft_horizon=False)\
     .training(
+        grad_clip=40,
         initial_alpha=1,
         train_batch_size=256,
         training_intensity=256/rollout_vs_train,
@@ -47,7 +48,8 @@ config = SACConfig().framework('torch') \
         evaluation_duration=16,
         evaluation_config={
             "no_done_at_end":False,
-            "horizon":None
+            "horizon":None,
+            "num_envs_per_worker": 1
     })\
     .reporting(
         min_time_s_per_iteration=0,
@@ -64,7 +66,8 @@ print(summarize(config))
 class SAC_FixAlpha_Parallel(SAC_Parallel):
     def get_default_policy_class(self, config):
         return SACPolicy_FixedAlpha
-
+#%%
+# trainer=SAC_FixAlpha_Parallel(config=config)
 
 #%%
 # calculate_rr_weights(config)
