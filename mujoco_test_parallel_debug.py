@@ -14,7 +14,7 @@ from policy import SACPolicy,SACPolicy_FixedAlpha
 from ray.rllib.utils.debug import summarize
 from tqdm import trange
 
-num_test=1
+
 
 num_rollout_workers=0
 num_envs_per_worker=4
@@ -44,8 +44,8 @@ config = SACConfig().framework('torch') \
     .resources(num_gpus=0.1)\
     .evaluation(
         evaluation_interval=10, 
-        evaluation_num_workers=16, 
-        evaluation_duration=16,
+        evaluation_num_workers=1, 
+        evaluation_duration=10,
         evaluation_config={
             "no_done_at_end":False,
             "horizon":None,
@@ -73,7 +73,7 @@ class SAC_FixAlpha_Parallel(SAC_Parallel):
 # calculate_rr_weights(config)
 #%%
 
-ray.init(num_cpus=(8+1+16)*num_test, num_gpus=1, local_mode=False, include_dashboard=False)
+ray.init(num_cpus=(num_rollout_workers+1+1), num_gpus=1, local_mode=False, include_dashboard=False)
 trainer=SAC_FixAlpha_Parallel(config=config)
 
 

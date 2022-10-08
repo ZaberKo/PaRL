@@ -19,7 +19,7 @@ config = SACConfig().framework('torch') \
     .rollouts(num_rollout_workers=0, num_envs_per_worker=1,no_done_at_end=True,horizon=1000,soft_horizon=False)\
     .training(
         initial_alpha=0.2,
-        grad_clip=40,
+        grad_clip=1,
         replay_buffer_config={
         "_enable_replay_buffer_api": True,
         "type": "MultiAgentReplayBuffer",
@@ -59,10 +59,10 @@ result_grid = Tuner(
     ),
     run_config=RunConfig(
         local_dir="~/ray_results",
-        stop={"training_iteration": 1000}, # this will results in 1e6 updates
+        stop={"training_iteration": 3000}, # this will results in 1e6 updates
         checkpoint_config=CheckpointConfig(
             num_to_keep=None,  # save all checkpoints
-            checkpoint_frequency=100
+            checkpoint_frequency=10
         )
     )
 ).fit()

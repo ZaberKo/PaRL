@@ -17,3 +17,5 @@ d2={
 
 merge_dicts(d1,d2)
 # %%
+d1.update(d2)
+# %%

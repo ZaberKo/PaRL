@@ -22,7 +22,7 @@ from ray.rllib.utils.torch_utils import (
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
-from .sac_policy_mixin import SACEvolveMixin, learn_on_loaded_batch
+from .sac_policy_mixin import SACEvolveMixin, SACDelayPolicyUpdate
 from .action_dist import SquashedGaussian
 from .sac_loss import actor_critic_loss_fix,actor_critic_loss_no_alpha
 
@@ -156,6 +156,7 @@ def setup_late_mixins(
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> None:
+    SACDelayPolicyUpdate.__init__(policy)
     ComputeTDErrorMixin.__init__(policy)
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
@@ -194,11 +195,7 @@ SACPolicy_FixedAlpha = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACDelayPolicyUpdate, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
 )
 
-
-# fix record grad_info
-SACPolicy.learn_on_loaded_batch=learn_on_loaded_batch
-SACPolicy_FixedAlpha.learn_on_loaded_batch=learn_on_loaded_batch

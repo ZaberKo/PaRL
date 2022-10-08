@@ -3,7 +3,7 @@ from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.torch_utils import huber_loss
 from ray.rllib.algorithms.dqn.dqn_tf_policy import PRIO_WEIGHTS
 
-from typing import List, Type, Union, Dict,Tuple, Optional
+from typing import List, Type, Union, Dict, Tuple, Optional
 from ray.rllib.policy.policy import Policy
 from ray.rllib.utils.typing import (
     TensorType,
@@ -17,6 +17,7 @@ from ray.rllib.models import ModelV2
 
 torch, nn = try_import_torch()
 F = nn.functional
+
 
 def actor_critic_loss_fix(
     policy: Policy,
@@ -38,8 +39,7 @@ def actor_critic_loss_fix(
     """
     # force limit the log_alpha for numerical stabilization
     with torch.no_grad():
-        model.log_alpha.clamp_(min=-20,max=2)
-
+        model.log_alpha.clamp_(min=-20, max=2)
 
     # Look up the target model (tower) using the model tower.
     target_model = policy.target_models[model]
@@ -48,15 +48,18 @@ def actor_critic_loss_fix(
     deterministic = policy.config["_deterministic_loss"]
 
     model_out_t, _ = model(
-        SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], _is_training=True), [], None
+        SampleBatch(obs=train_batch[SampleBatch.CUR_OBS],
+                    _is_training=True), [], None
     )
 
     model_out_tp1, _ = model(
-        SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True), [], None
+        SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS],
+                    _is_training=True), [], None
     )
 
     target_model_out_tp1, _ = target_model(
-        SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True), [], None
+        SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS],
+                    _is_training=True), [], None
     )
 
     alpha = torch.exp(model.log_alpha)
@@ -67,7 +70,8 @@ def actor_critic_loss_fix(
         action_dist_inputs_t, _ = model.get_action_model_outputs(model_out_t)
         log_pis_t = F.log_softmax(action_dist_inputs_t, dim=-1)
         policy_t = torch.exp(log_pis_t)
-        action_dist_inputs_tp1, _ = model.get_action_model_outputs(model_out_tp1)
+        action_dist_inputs_tp1, _ = model.get_action_model_outputs(
+            model_out_tp1)
         log_pis_tp1 = F.log_softmax(action_dist_inputs_tp1, -1)
         policy_tp1 = torch.exp(log_pis_tp1)
         # Q-values.
@@ -76,7 +80,8 @@ def actor_critic_loss_fix(
         q_tp1, _ = target_model.get_q_values(target_model_out_tp1)
         if policy.config["twin_q"]:
             twin_q_t, _ = model.get_twin_q_values(model_out_t)
-            twin_q_tp1, _ = target_model.get_twin_q_values(target_model_out_tp1)
+            twin_q_tp1, _ = target_model.get_twin_q_values(
+                target_model_out_tp1)
             q_tp1 = torch.min(q_tp1, twin_q_tp1)
         q_tp1 -= alpha * log_pis_tp1
 
@@ -89,7 +94,8 @@ def actor_critic_loss_fix(
             twin_q_t_selected = torch.sum(twin_q_t * one_hot, dim=-1)
         # Discrete case: "Best" means weighted by the policy (prob) outputs.
         q_tp1_best = torch.sum(torch.mul(policy_tp1, q_tp1), dim=-1)
-        q_tp1_best_masked = (1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+        q_tp1_best_masked = (
+            1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
     # Continuous actions case.
     else:
         # Sample single actions from distribution.
@@ -102,7 +108,8 @@ def actor_critic_loss_fix(
             else action_dist_t.deterministic_sample()
         )
         log_pis_t = torch.unsqueeze(action_dist_t.logp(policy_t), -1)
-        action_dist_inputs_tp1, _ = model.get_action_model_outputs(model_out_tp1)
+        action_dist_inputs_tp1, _ = model.get_action_model_outputs(
+            model_out_tp1)
         action_dist_tp1 = action_dist_class(action_dist_inputs_tp1, model)
         policy_tp1 = (
             action_dist_tp1.sample()
@@ -112,7 +119,8 @@ def actor_critic_loss_fix(
         log_pis_tp1 = torch.unsqueeze(action_dist_tp1.logp(policy_tp1), -1)
 
         # Q-values for the actually selected actions.
-        q_t, _ = model.get_q_values(model_out_t, train_batch[SampleBatch.ACTIONS])
+        q_t, _ = model.get_q_values(
+            model_out_t, train_batch[SampleBatch.ACTIONS])
         if policy.config["twin_q"]:
             twin_q_t, _ = model.get_twin_q_values(
                 model_out_t, train_batch[SampleBatch.ACTIONS]
@@ -121,7 +129,8 @@ def actor_critic_loss_fix(
         # Q-values for current policy in given current state.
         q_t_det_policy, _ = model.get_q_values(model_out_t, policy_t)
         if policy.config["twin_q"]:
-            twin_q_t_det_policy, _ = model.get_twin_q_values(model_out_t, policy_t)
+            twin_q_t_det_policy, _ = model.get_twin_q_values(
+                model_out_t, policy_t)
             q_t_det_policy = torch.min(q_t_det_policy, twin_q_t_det_policy)
 
         # Target q network evaluation.
@@ -139,12 +148,14 @@ def actor_critic_loss_fix(
         q_tp1 -= alpha.detach() * log_pis_tp1
 
         q_tp1_best = torch.squeeze(input=q_tp1, dim=-1)
-        q_tp1_best_masked = (1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+        q_tp1_best_masked = (
+            1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
 
     # compute RHS of bellman equation
     q_t_selected_target = (
         train_batch[SampleBatch.REWARDS]
-        + (policy.config["gamma"] ** policy.config["n_step"]) * q_tp1_best_masked
+        + (policy.config["gamma"] **
+           policy.config["n_step"]) * q_tp1_best_masked
     ).detach()
 
     # Compute the TD-error (potentially clipped).
@@ -155,7 +166,8 @@ def actor_critic_loss_fix(
     else:
         td_error = base_td_error
 
-    critic_loss = [torch.mean(train_batch[PRIO_WEIGHTS] * huber_loss(base_td_error))]
+    critic_loss = [torch.mean(train_batch[PRIO_WEIGHTS]
+                              * huber_loss(base_td_error))]
     if policy.config["twin_q"]:
         critic_loss.append(
             torch.mean(train_batch[PRIO_WEIGHTS] * huber_loss(twin_td_error))
@@ -208,8 +220,6 @@ def actor_critic_loss_fix(
 
     # Return all loss terms corresponding to our optimizers.
     return tuple([actor_loss] + critic_loss + [alpha_loss])
-
-
 
 
 # disable alpha tuning and disable priority replay
@@ -345,3 +355,6 @@ def actor_critic_loss_no_alpha(
 
     # Return all loss terms corresponding to our optimizers.
     return tuple([actor_loss] + critic_loss)
+
+
+
