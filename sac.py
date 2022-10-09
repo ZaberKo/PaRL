@@ -26,6 +26,7 @@ from ray.rllib.execution.common import (
 from ray.rllib.utils.deprecation import DEPRECATED_VALUE
 from ray.rllib.utils.replay_buffers.utils import sample_min_n_steps_from_buffer
 
+
 def calculate_rr_weights(config: AlgorithmConfigDict):
     """Calculate the round robin weights for the rollout and train steps"""
     if not config["training_intensity"]:
@@ -72,7 +73,8 @@ class SAC_Parallel(SAC):
         train_results = {}
 
         # We alternate between storing new samples and sampling and training
-        store_weight, sample_and_train_weight = calculate_rr_weights(self.config)
+        store_weight, sample_and_train_weight = calculate_rr_weights(
+            self.config)
 
         for _ in range(store_weight):
             # Sample (MultiAgentBatch) from workers.
@@ -93,7 +95,8 @@ class SAC_Parallel(SAC):
 
         for _ in range(sample_and_train_weight):
             # Sample training batch (MultiAgentBatch) from replay buffer.
-            train_batch = self.local_replay_buffer.sample(self.config["train_batch_size"])
+            train_batch = self.local_replay_buffer.sample(
+                self.config["train_batch_size"])
 
             # Old-style replay buffers return None if learning has not started
             if train_batch is None or len(train_batch) == 0:
@@ -101,7 +104,8 @@ class SAC_Parallel(SAC):
                 break
 
             # Postprocess batch before we learn on it
-            post_fn = self.config.get("before_learn_on_batch") or (lambda b, *a: b)
+            post_fn = self.config.get(
+                "before_learn_on_batch") or (lambda b, *a: b)
             train_batch = post_fn(train_batch, self.workers, self.config)
 
             # for policy_id, sample_batch in train_batch.policy_batches.items():
@@ -112,7 +116,8 @@ class SAC_Parallel(SAC):
             # Use simple optimizer (only for multi-agent or tf-eager; all other
             # cases should use the multi-GPU optimizer, even if only using 1 GPU)
 
-            train_results = multi_gpu_train_one_step(self, train_batch)
+            # train_results = multi_gpu_train_one_step(self, train_batch)
+            train_results = train_one_step(self, train_batch)
 
             # Update replay buffer priorities.
             update_priorities_in_replay_buffer(
