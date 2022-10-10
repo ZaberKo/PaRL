@@ -54,8 +54,8 @@ config = SACConfig().framework('torch') \
 
 
 #%%
-from sac import calculate_rr_weights
-calculate_rr_weights(config)
+# from sac import calculate_rr_weights
+# calculate_rr_weights(config)
 
 #%%
 class SAC_FixAlpha(SAC_Parallel):

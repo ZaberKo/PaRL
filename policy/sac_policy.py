@@ -1,4 +1,4 @@
-from inspect import isclass
+import numpy as np
 import tree
 import ray
 
@@ -24,10 +24,10 @@ from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from .sac_policy_mixin import SACEvolveMixin, SACDelayPolicyUpdate
 from .action_dist import SquashedGaussian
-from .sac_loss import actor_critic_loss_fix,actor_critic_loss_no_alpha
+from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
 import gym
-from ray.rllib.policy.policy import Policy
+from ray.rllib.policy import Policy, TorchPolicy
 from ray.rllib.utils.typing import (
     TensorType,
     AlgorithmConfigDict,
@@ -36,10 +36,11 @@ from ray.rllib.utils.typing import (
 )
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models import ModelV2
-from typing import List, Type, Union, Dict,Tuple, Optional
+from typing import List, Type, Union, Dict, Tuple, Optional
 
 torch, nn = try_import_torch()
 F = nn.functional
+
 
 def optimizer_fn_no_alpha(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOptimizer]:
     """Creates all necessary optimizers for SAC learning.
@@ -112,6 +113,7 @@ def action_distribution_fn_fix(
 
     return action_dist_inputs, policy.dist_class, []
 
+
 def build_sac_model_and_action_dist_fix(
     policy: Policy,
     obs_space: gym.spaces.Space,
@@ -150,6 +152,7 @@ def stats_no_alpha(policy: Policy, train_batch: SampleBatch) -> Dict[str, Tensor
         "min_q": torch.min(q_t),
     }
 
+
 def setup_late_mixins(
     policy: Policy,
     obs_space: gym.spaces.Space,
@@ -160,6 +163,41 @@ def setup_late_mixins(
     ComputeTDErrorMixin.__init__(policy)
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
+
+
+def record_grads(
+    policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
+) -> Dict[str, TensorType]:
+    """Applies gradient clipping to already computed grads inside `optimizer`.
+
+    Args:
+        policy: The TorchPolicy, which calculated `loss`.
+        optimizer: A local torch optimizer object.
+        loss: The torch loss tensor.
+
+    Returns:
+        An info dict containing the "grad_norm" key and the resulting clipped
+        gradients.
+    """
+    grad_gnorm = 0
+
+    for param_group in optimizer.param_groups:
+        params = list(
+            filter(lambda p: p.grad is not None, param_group["params"]))
+        if params:
+            grad_gnorm += torch.norm(torch.stack([
+                torch.norm(p.grad.detach(), p=2)
+                for p in params
+            ]), p=2).cpu().numpy()
+
+    if policy.actor_optim==optimizer:
+        return {"actor_grad_gnorm": grad_gnorm}
+    elif policy.critic_optims[0]==optimizer:
+        return {"critic_grad_gnorm": grad_gnorm}
+    elif policy.critic_optims[1]==optimizer:
+        return {"twin_critic_grad_gnorm": grad_gnorm}
+    else:
+        return {}
 
 
 # Build a child class of `TorchPolicy`, given the custom functions defined
@@ -189,13 +227,14 @@ SACPolicy_FixedAlpha = build_policy_class(
     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
     stats_fn=stats_no_alpha,
     postprocess_fn=postprocess_trajectory,
-    extra_grad_process_fn=apply_grad_clipping,
+    # extra_grad_process_fn=apply_grad_clipping,
+    extra_grad_process_fn=record_grads,
     optimizer_fn=optimizer_fn_no_alpha,
     validate_spaces=validate_spaces,
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACDelayPolicyUpdate, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACDelayPolicyUpdate, TargetNetworkMixin,
+            ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
 )
-

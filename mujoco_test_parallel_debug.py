@@ -39,7 +39,7 @@ config = SACConfig().framework('torch') \
         "type": "MultiAgentReplayBuffer",
         "capacity": int(1e6),
         # How many steps of the model to sample before learning starts.
-        "learning_starts": 10000,
+        "learning_starts": 1000,
     })\
     .resources(num_gpus=0.1)\
     .evaluation(
@@ -76,6 +76,11 @@ class SAC_FixAlpha_Parallel(SAC_Parallel):
 ray.init(num_cpus=(num_rollout_workers+1+1), num_gpus=1, local_mode=False, include_dashboard=False)
 trainer=SAC_FixAlpha_Parallel(config=config)
 
+#%%
+# policy=trainer.get_policy()
+# model=policy.model
+
+#%%
 
 
 #%%

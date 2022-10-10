@@ -203,7 +203,7 @@ def actor_critic_loss_fix(
         # on the policy vars (policy sample pushed through Q-net).
         # However, we must make sure `actor_loss` is not used to update
         # the Q-net(s)' variables.
-        actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy)
+        actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy.detach())
 
     # Store values for stats function in model (tower), such that for
     # multi-GPU, we do not override them during the parallel loss phase.
@@ -339,7 +339,7 @@ def actor_critic_loss_no_alpha(
 
     # Alpha- and actor losses.
     # Note: In the papers, alpha is used directly, here we take the log.
-    actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy)
+    actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy.detach())
 
     # Store values for stats function in model (tower), such that for
     # multi-GPU, we do not override them during the parallel loss phase.

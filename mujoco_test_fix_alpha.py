@@ -19,7 +19,7 @@ config = SACConfig().framework('torch') \
     .rollouts(num_rollout_workers=0, num_envs_per_worker=1,no_done_at_end=True,horizon=1000,soft_horizon=False)\
     .training(
         initial_alpha=0.2,
-        grad_clip=1,
+        # grad_clip=1,
         replay_buffer_config={
         "_enable_replay_buffer_api": True,
         "type": "MultiAgentReplayBuffer",

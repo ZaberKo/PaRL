@@ -5,10 +5,25 @@ from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
 from ray.rllib.policy.torch_policy import TorchPolicy, _directStepOptimizerSingleton
 
+import time
 import torch
 import numpy as np
 
+from ray.rllib.utils import NullContextManager, force_list
 from ray.rllib.utils import deep_update
+import threading
+
+
+from typing import List,Tuple
+from ray.rllib.evaluation import SampleBatch
+from ray.rllib.utils.typing import (
+    AlgorithmConfigDict,
+    GradInfoDict,
+    ModelGradients,
+    ModelWeights,
+    TensorStructType,
+    TensorType,
+)
 
 
 class SACEvolveMixin:
@@ -128,6 +143,149 @@ class SACDelayPolicyUpdate:
         batch_fetches.update(self.extra_compute_grad_fetches())
 
         return batch_fetches
+
+
+    def _multi_gpu_parallel_grad_calc(
+        self, sample_batches: List[SampleBatch]
+    ) -> List[Tuple[List[TensorType], GradInfoDict]]:
+        """Performs a parallelized loss and gradient calculation over the batch.
+
+        Splits up the given train batch into n shards (n=number of this
+        Policy's devices) and passes each data shard (in parallel) through
+        the loss function using the individual devices' models
+        (self.model_gpu_towers). Then returns each tower's outputs.
+
+        Args:
+            sample_batches: A list of SampleBatch shards to
+                calculate loss and gradients for.
+
+        Returns:
+            A list (one item per device) of 2-tuples, each with 1) gradient
+            list and 2) grad info dict.
+        """
+        assert len(self.model_gpu_towers) == len(sample_batches)
+        lock = threading.Lock()
+        results = {}
+        grad_enabled = torch.is_grad_enabled()
+
+        def _worker(shard_idx, model, sample_batch, device):
+            torch.set_grad_enabled(grad_enabled)
+            try:
+                with NullContextManager() if device.type == "cpu" else torch.cuda.device(  # noqa: E501
+                    device
+                ):
+                    loss_out = force_list(
+                        self._loss(self, model, self.dist_class, sample_batch)
+                    )
+
+                    # Call Model's custom-loss with Policy loss outputs and
+                    # train_batch.
+                    loss_out = model.custom_loss(loss_out, sample_batch)
+
+                    assert len(loss_out) == len(self._optimizers)
+
+                    # Loop through all optimizers.
+                    grad_info = {"allreduce_latency": 0.0}
+
+                    parameters = list(model.parameters())
+                    all_grads = [None for _ in range(len(parameters))]
+                    for opt_idx, opt in enumerate(self._optimizers):
+                        # Erase gradients in all vars of the tower that this
+                        # optimizer would affect.
+                        param_indices = self.multi_gpu_param_groups[opt_idx]
+                        # for param_idx, param in enumerate(parameters):
+                        #     if param_idx in param_indices and param.grad is not None:
+                        #         param.grad.data.zero_()
+                        opt.zero_grad()
+                        # Recompute gradients of loss over all variables.
+                        loss_out[opt_idx].backward()
+                        grad_info.update(
+                            self.extra_grad_process(opt, loss_out[opt_idx])
+                        )
+
+                        grads = []
+                        # Note that return values are just references;
+                        # Calling zero_grad would modify the values.
+                        for param_idx, param in enumerate(parameters):
+                            if param_idx in param_indices:
+                                if param.grad is not None:
+                                    grads.append(param.grad)
+                                all_grads[param_idx] = param.grad
+
+                        if self.distributed_world_size:
+                            start = time.time()
+                            if torch.cuda.is_available():
+                                # Sadly, allreduce_coalesced does not work with
+                                # CUDA yet.
+                                for g in grads:
+                                    torch.distributed.all_reduce(
+                                        g, op=torch.distributed.ReduceOp.SUM
+                                    )
+                            else:
+                                torch.distributed.all_reduce_coalesced(
+                                    grads, op=torch.distributed.ReduceOp.SUM
+                                )
+
+                            for param_group in opt.param_groups:
+                                for p in param_group["params"]:
+                                    if p.grad is not None:
+                                        p.grad /= self.distributed_world_size
+
+                            grad_info["allreduce_latency"] += time.time() - start
+
+                with lock:
+                    results[shard_idx] = (all_grads, grad_info)
+            except Exception as e:
+                import traceback
+
+                with lock:
+                    results[shard_idx] = (
+                        ValueError(
+                            e.args[0]
+                            + "\n traceback"
+                            + traceback.format_exc()
+                            + "\n"
+                            + "In tower {} on device {}".format(shard_idx, device)
+                        ),
+                        e,
+                    )
+
+        # Single device (GPU) or fake-GPU case (serialize for better
+        # debugging).
+        if len(self.devices) == 1 or self.config["_fake_gpus"]:
+            for shard_idx, (model, sample_batch, device) in enumerate(
+                zip(self.model_gpu_towers, sample_batches, self.devices)
+            ):
+                _worker(shard_idx, model, sample_batch, device)
+                # Raise errors right away for better debugging.
+                last_result = results[len(results) - 1]
+                if isinstance(last_result[0], ValueError):
+                    raise last_result[0] from last_result[1]
+        # Multi device (GPU) case: Parallelize via threads.
+        else:
+            threads = [
+                threading.Thread(
+                    target=_worker, args=(shard_idx, model, sample_batch, device)
+                )
+                for shard_idx, (model, sample_batch, device) in enumerate(
+                    zip(self.model_gpu_towers, sample_batches, self.devices)
+                )
+            ]
+
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        # Gather all threads' outputs and return.
+        outputs = []
+        for shard_idx in range(len(sample_batches)):
+            output = results[shard_idx]
+            if isinstance(output[0], Exception):
+                raise output[0] from output[1]
+            outputs.append(results[shard_idx])
+        return outputs
+
 
 
     def apply_gradients(self) -> None:
