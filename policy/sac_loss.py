@@ -263,17 +263,10 @@ def actor_critic_loss_no_alpha(
     )
 
     alpha = torch.exp(model.log_alpha)
-
-    # Sample single actions from distribution.
     action_dist_class = dist_class
-    action_dist_inputs_t, _ = model.get_action_model_outputs(model_out_t)
-    action_dist_t = action_dist_class(action_dist_inputs_t, model)
-    policy_t = (
-        action_dist_t.sample()
-        if not deterministic
-        else action_dist_t.deterministic_sample()
-    )
-    log_pis_t = torch.unsqueeze(action_dist_t.logp(policy_t), -1)
+
+    
+    # ============== critic loss ================
     action_dist_inputs_tp1, _ = model.get_action_model_outputs(model_out_tp1)
     action_dist_tp1 = action_dist_class(action_dist_inputs_tp1, model)
     policy_tp1 = (
@@ -281,7 +274,7 @@ def actor_critic_loss_no_alpha(
         if not deterministic
         else action_dist_tp1.deterministic_sample()
     )
-    log_pis_tp1 = torch.unsqueeze(action_dist_tp1.logp(policy_tp1), -1)
+    log_pis_tp1 = torch.unsqueeze(action_dist_tp1.logp(policy_tp1), -1) #[B] -> [B,1]
 
     # Q-values for the actually selected actions.
     q_t, _ = model.get_q_values(model_out_t, train_batch[SampleBatch.ACTIONS])
@@ -290,36 +283,32 @@ def actor_critic_loss_no_alpha(
             model_out_t, train_batch[SampleBatch.ACTIONS]
         )
 
-    # Q-values for current policy in given current state.
-    q_t_det_policy, _ = model.get_q_values(model_out_t, policy_t)
-    if policy.config["twin_q"]:
-        twin_q_t_det_policy, _ = model.get_twin_q_values(model_out_t, policy_t)
-        q_t_det_policy = torch.min(q_t_det_policy, twin_q_t_det_policy)
-
-    # Target q network evaluation.
-    q_tp1, _ = target_model.get_q_values(target_model_out_tp1, policy_tp1)
-    if policy.config["twin_q"]:
-        twin_q_tp1, _ = target_model.get_twin_q_values(
-            target_model_out_tp1, policy_tp1
-        )
-        # Take min over both twin-NNs.
-        q_tp1 = torch.min(q_tp1, twin_q_tp1)
-
-    q_t_selected = torch.squeeze(q_t, dim=-1)
+    q_t_selected = torch.squeeze(q_t, dim=-1) # [B,1] -> [B]
     if policy.config["twin_q"]:
         twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
-    q_tp1 -= alpha * log_pis_tp1
 
-    q_tp1_best = torch.squeeze(input=q_tp1, dim=-1)
-    q_tp1_best_masked = (
-        1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+    # Target q network evaluation.
+    with torch.no_grad():
+        q_tp1, _ = target_model.get_q_values(target_model_out_tp1, policy_tp1)
+        if policy.config["twin_q"]:
+            twin_q_tp1, _ = target_model.get_twin_q_values(
+                target_model_out_tp1, policy_tp1
+            )
+            # Take min over both twin-NNs.
+            q_tp1 = torch.min(q_tp1, twin_q_tp1)
 
-    # compute RHS of bellman equation
-    q_t_selected_target = (
-        train_batch[SampleBatch.REWARDS]
-        + (policy.config["gamma"] **
-           policy.config["n_step"]) * q_tp1_best_masked
-    ).detach()
+        q_tp1 -= alpha * log_pis_tp1
+
+        q_tp1_best = torch.squeeze(input=q_tp1, dim=-1) # [B,1] -> [B]
+        q_tp1_best_masked = (
+            1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+
+        # compute RHS of bellman equation
+        q_t_selected_target = (
+            train_batch[SampleBatch.REWARDS]
+            + (policy.config["gamma"] **
+            policy.config["n_step"]) * q_tp1_best_masked
+        ).detach()
 
     # Compute the TD-error (potentially clipped).
     base_td_error = torch.abs(q_t_selected - q_t_selected_target)
@@ -337,9 +326,26 @@ def actor_critic_loss_no_alpha(
             torch.mean(train_batch[PRIO_WEIGHTS] * huber_loss(twin_td_error))
         )
 
-    # Alpha- and actor losses.
-    # Note: In the papers, alpha is used directly, here we take the log.
-    actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy.detach())
+    # ================ actor loss =================
+    # Sample single actions from distribution.
+    action_dist_inputs_t, _ = model.get_action_model_outputs(model_out_t)
+    action_dist_t = action_dist_class(action_dist_inputs_t, model)
+    policy_t = (
+        action_dist_t.sample()
+        if not deterministic
+        else action_dist_t.deterministic_sample()
+    )
+    log_pis_t = torch.unsqueeze(action_dist_t.logp(policy_t), -1)
+
+    # Q-values for current policy in given current state.
+    q_t_det_policy, _ = model.get_q_values(model_out_t, policy_t)
+    if policy.config["twin_q"]:
+        twin_q_t_det_policy, _ = model.get_twin_q_values(model_out_t, policy_t)
+        q_t_det_policy = torch.min(q_t_det_policy, twin_q_t_det_policy)
+
+
+
+    actor_loss = torch.mean(alpha.detach() * log_pis_t - q_t_det_policy)
 
     # Store values for stats function in model (tower), such that for
     # multi-GPU, we do not override them during the parallel loss phase.
