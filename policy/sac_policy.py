@@ -20,10 +20,11 @@ from ray.rllib.utils.torch_utils import (
     concat_multi_gpu_td_errors,
 )
 from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
-from ray.rllib.algorithms.sac.sac_torch_model import SACTorchModel
+
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
+from .sac_model import SACTorchModel
 from .sac_policy_mixin import SACEvolveMixin, SACDelayPolicyUpdate
 from .action_dist import SquashedGaussian, SquashedGaussian2
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha

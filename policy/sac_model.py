@@ -5,6 +5,7 @@ import tree  # pip install dm_tree
 from typing import Dict, List, Optional, Tuple
 
 from ray.rllib.models.catalog import ModelCatalog
+from ray.rllib.models.utils import get_activation_fn
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
@@ -133,7 +134,7 @@ class SACTorchModel(TorchModelV2, nn.Module):
         input_dict: Dict[str, TensorType],
         state: List[TensorType],
         seq_lens: TensorType,
-    ) -> Tuple[TensorType, List[TensorType]] :
+    ) -> Tuple[TensorType, List[TensorType]]:
         """The common (Q-net and policy-net) forward pass.
 
         NOTE: It is not(!) recommended to override this method as it would
@@ -153,13 +154,20 @@ class SACTorchModel(TorchModelV2, nn.Module):
         Returns:
             TorchModelV2: The TorchModelV2 policy sub-model.
         """
-        model = ModelCatalog.get_model_v2(
-            obs_space,
-            self.action_space,
-            num_outputs,
-            policy_model_config,
-            framework="torch",
-            name=name,
+        # model = ModelCatalog.get_model_v2(
+        #     obs_space,
+        #     self.action_space,
+        #     num_outputs,
+        #     policy_model_config,
+        #     framework="torch",
+        #     name=name,
+        # )
+        model = FullyConnectedNetwork(
+            obs_space=obs_space,
+            action_space=self.action_space,
+            num_outputs=num_outputs,
+            model_config=policy_model_config,
+            name=name
         )
         return model
 
@@ -174,27 +182,24 @@ class SACTorchModel(TorchModelV2, nn.Module):
         Returns:
             TorchModelV2: The TorchModelV2 Q-net sub-model.
         """
-        self.concat_obs_and_actions = False
-        if self.discrete:
-            input_space = obs_space
-        else:
-            orig_space = getattr(obs_space, "original_space", obs_space)
-            if isinstance(orig_space, Box) and len(orig_space.shape) == 1:
-                input_space = Box(
-                    float("-inf"),
-                    float("inf"),
-                    shape=(orig_space.shape[0] + action_space.shape[0],),
-                )
-                self.concat_obs_and_actions = True
-            else:
-                input_space = gym.spaces.Tuple([orig_space, action_space])
 
-        model = ModelCatalog.get_model_v2(
+        orig_space = getattr(obs_space, "original_space", obs_space)
+        if isinstance(orig_space, Box) and len(orig_space.shape) == 1:
+            input_space = Box(
+                float("-inf"),
+                float("inf"),
+                shape=(orig_space.shape[0] + action_space.shape[0],),
+            )
+            self.concat_obs_and_actions = True
+        else:
+            input_space = gym.spaces.Tuple([orig_space, action_space])
+            self.concat_obs_and_actions = False
+
+        model = FullyConnectedNetwork(
             input_space,
             action_space,
             num_outputs,
             q_model_config,
-            framework="torch",
             name=name,
         )
         return model
@@ -327,3 +332,108 @@ class SACTorchModel(TorchModelV2, nn.Module):
         return self.q_net.variables() + (
             self.twin_q_net.variables() if self.twin_q_net else []
         )
+
+
+class SlimFC(nn.Module):
+    """Simple PyTorch version of `linear` function"""
+
+    def __init__(
+        self,
+        in_size: int,
+        out_size: int,
+        activation_fn=None,
+        use_bias: bool = True,
+    ):
+        """Creates a standard FC layer, similar to torch.nn.Linear
+
+        Args:
+            in_size(int): Input size for FC Layer
+            out_size: Output size for FC Layer
+            initializer: Initializer function for FC layer weights
+            activation_fn: Activation function at the end of layer
+            use_bias: Whether to add bias weights or not
+            bias_init: Initalize bias weights to bias_init const
+        """
+        super(SlimFC, self).__init__()
+        layers = []
+        # Actual nn.Linear layer (including correct initialization logic).
+        linear = nn.Linear(in_size, out_size, bias=use_bias)
+
+        layers.append(linear)
+        # Activation function (if any; default=None (linear)).
+        if isinstance(activation_fn, str):
+            activation_fn = get_activation_fn(activation_fn, "torch")
+        if activation_fn is not None:
+            layers.append(activation_fn())
+        # Put everything in sequence.
+        self._model = nn.Sequential(*layers)
+
+    def forward(self, x: TensorType) -> TensorType:
+        return self._model(x)
+
+
+class FullyConnectedNetwork(TorchModelV2, nn.Module):
+    """Generic fully connected network."""
+
+    def __init__(
+        self,
+        obs_space: gym.spaces.Space,
+        action_space: gym.spaces.Space,
+        num_outputs: int,
+        model_config: ModelConfigDict,
+        name: str,
+    ):
+        TorchModelV2.__init__(
+            self, obs_space, action_space, num_outputs, model_config, name
+        )
+        nn.Module.__init__(self)
+
+        hiddens = list(model_config.get("fcnet_hiddens", []))
+        activation = model_config.get("fcnet_activation")
+
+        layers = []
+        prev_layer_size = int(np.product(obs_space.shape))
+        self._logits = None
+
+        # Create layers 0 to second-last.
+        for size in hiddens[:-1]:
+            layers.append(
+                SlimFC(
+                    in_size=prev_layer_size,
+                    out_size=size,
+                    activation_fn=activation,
+                )
+            )
+            prev_layer_size = size
+
+        if len(hiddens) > 0:
+            layers.append(
+                SlimFC(
+                    in_size=prev_layer_size,
+                    out_size=hiddens[-1],
+                    activation_fn=activation,
+                )
+            )
+            prev_layer_size = hiddens[-1]
+
+        self._hidden_layers = nn.Sequential(*layers)
+        # output layer
+        self._logits = SlimFC(
+            in_size=prev_layer_size,
+            out_size=num_outputs,
+            activation_fn=None,
+        )
+
+    @override(TorchModelV2)
+    def forward(
+        self,
+        input_dict: Dict[str, TensorType],
+        state: List[TensorType],
+        seq_lens: TensorType,
+    ) -> Tuple[TensorType, List[TensorType]]:
+        obs = input_dict["obs_flat"].float()
+        flat_obs = obs.reshape(obs.shape[0], -1)  # [B, n]
+        features = self._hidden_layers(flat_obs)
+        logits = self._logits(features)
+
+        return logits, state
