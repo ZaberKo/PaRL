@@ -11,8 +11,8 @@ from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.numpy import (
     SMALL_NUMBER, 
-    # MIN_LOG_NN_OUTPUT, 
-    # MAX_LOG_NN_OUTPUT
+    MIN_LOG_NN_OUTPUT, 
+    MAX_LOG_NN_OUTPUT
 )
 from ray.rllib.utils.typing import TensorType, List, Union, Tuple, ModelConfigDict
 
@@ -21,8 +21,8 @@ torch, nn = try_import_torch()
 # numerically stable version of TorchSquashedGaussian
 
 
-MIN_LOG_NN_OUTPUT=2
-MAX_LOG_NN_OUTPUT=-20
+# MIN_LOG_NN_OUTPUT=-20
+# MAX_LOG_NN_OUTPUT=2
 
 
 class SquashedGaussian(TorchSquashedGaussian):

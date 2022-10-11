@@ -23,7 +23,7 @@ from ray.rllib.utils.torch_utils import (
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from .sac_policy_mixin import SACEvolveMixin, SACDelayPolicyUpdate
-from .action_dist import SquashedGaussian
+from .action_dist import SquashedGaussian, SquashedGaussian2
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
 import gym
@@ -109,7 +109,7 @@ def action_distribution_fn_fix(
     action_dist_inputs, _ = model.get_action_model_outputs(model_out)
     # Get a distribution class to be used with the just calculated dist-inputs.
 
-    assert issubclass(policy.dist_class, SquashedGaussian)
+    # assert issubclass(policy.dist_class, SquashedGaussian)
 
     return action_dist_inputs, policy.dist_class, []
 
@@ -121,7 +121,7 @@ def build_sac_model_and_action_dist_fix(
     config: AlgorithmConfigDict,
 ) -> Tuple[ModelV2, Type[TorchDistributionWrapper]]:
     model = build_sac_model(policy, obs_space, action_space, config)
-    action_dist_class = SquashedGaussian
+    action_dist_class = SquashedGaussian2
 
     return model, action_dist_class
 

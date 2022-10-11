@@ -14,13 +14,13 @@ from policy import SACPolicy,SACPolicy_FixedAlpha
 num_test=3
 
 num_rollout_workers=0
-num_envs_per_worker=5
+num_envs_per_worker=1
 
 rollout_vs_train=1
 
 config = SACConfig().framework('torch') \
     .rollouts(
-        # rollout_fragment_length=1, # already set in SAC
+        rollout_fragment_length=50, # already set in SAC
         num_rollout_workers=num_rollout_workers,
         num_envs_per_worker=num_envs_per_worker,
         no_done_at_end=True,
