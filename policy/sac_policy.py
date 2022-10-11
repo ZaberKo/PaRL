@@ -1,5 +1,6 @@
 import numpy as np
 import tree
+import copy
 import ray
 
 from ray.rllib.policy.policy_template import build_policy_class
@@ -10,7 +11,7 @@ from ray.rllib.algorithms.sac.sac_torch_policy import (
     TargetNetworkMixin
 )
 from ray.rllib.algorithms.sac.sac_tf_policy import (
-    build_sac_model,
+    # build_sac_model,
     postprocess_trajectory,
     validate_spaces,
 )
@@ -18,7 +19,8 @@ from ray.rllib.utils.torch_utils import (
     apply_grad_clipping,
     concat_multi_gpu_td_errors,
 )
-
+from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
+from ray.rllib.algorithms.sac.sac_torch_model import SACTorchModel
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
@@ -120,7 +122,54 @@ def build_sac_model_and_action_dist_fix(
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> Tuple[ModelV2, Type[TorchDistributionWrapper]]:
-    model = build_sac_model(policy, obs_space, action_space, config)
+        # Force-ignore any additionally provided hidden layer sizes.
+    # Everything should be configured using SAC's `q_model_config` and
+    # `policy_model_config` config settings.
+    policy_model_config = copy.deepcopy(MODEL_DEFAULTS)
+    policy_model_config.update(config["policy_model_config"])
+    q_model_config = copy.deepcopy(MODEL_DEFAULTS)
+    q_model_config.update(config["q_model_config"])
+
+    default_model_cls = SACTorchModel
+
+    model = ModelCatalog.get_model_v2(
+        obs_space=obs_space,
+        action_space=action_space,
+        num_outputs=None,
+        model_config=config["model"],
+        framework=config["framework"],
+        default_model=default_model_cls,
+        name="sac_model",
+        policy_model_config=policy_model_config,
+        q_model_config=q_model_config,
+        twin_q=config["twin_q"],
+        initial_alpha=config["initial_alpha"],
+        target_entropy=config["target_entropy"],
+    )
+
+    assert isinstance(model, default_model_cls)
+
+    # Create an exact copy of the model and store it in `policy.target_model`.
+    # This will be used for tau-synched Q-target models that run behind the
+    # actual Q-networks and are used for target q-value calculations in the
+    # loss terms.
+    policy.target_model = ModelCatalog.get_model_v2(
+        obs_space=obs_space,
+        action_space=action_space,
+        num_outputs=None,
+        model_config=config["model"],
+        framework=config["framework"],
+        default_model=default_model_cls,
+        name="target_sac_model",
+        policy_model_config=policy_model_config,
+        q_model_config=q_model_config,
+        twin_q=config["twin_q"],
+        initial_alpha=config["initial_alpha"],
+        target_entropy=config["target_entropy"],
+    )
+
+    assert isinstance(policy.target_model, default_model_cls)
+    
     action_dist_class = SquashedGaussian2
 
     return model, action_dist_class
