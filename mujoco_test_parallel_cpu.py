@@ -9,16 +9,32 @@ from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+import os
+import torch
 
-
-num_test=3
+num_test=2
 
 num_rollout_workers=0
 num_envs_per_worker=1
 
+num_cpus_for_local_worker=8
+
 rollout_vs_train=1
 
 num_eval_workers=16
+
+
+class CPUInitCallback(DefaultCallbacks):
+    def on_algorithm_init(self, *, algorithm: "Algorithm", **kwargs) -> None:
+        # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
+        # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker) 
+        # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        torch.set_num_threads(num_cpus_for_local_worker)
+
+
 
 config = SACConfig().framework('torch') \
     .rollouts(
@@ -39,7 +55,10 @@ config = SACConfig().framework('torch') \
         # How many steps of the model to sample before learning starts.
         "learning_starts": 10000,
     })\
-    .resources(num_gpus=0.1)\
+    .resources(
+        num_gpus=0,
+        num_cpus_for_local_worker=num_cpus_for_local_worker
+    )\
     .evaluation(
         evaluation_interval=10, 
         evaluation_num_workers=num_eval_workers, 
@@ -55,6 +74,7 @@ config = SACConfig().framework('torch') \
         metrics_num_episodes_for_smoothing=5
         ) \
     .environment(env="HalfCheetah-v3")\
+    .callbacks(CPUInitCallback)\
     .to_dict()
 
 
@@ -66,7 +86,13 @@ class SAC_FixAlpha_Parallel(SAC_Parallel):
 # calculate_rr_weights(config)
 #%%
 
-ray.init(num_cpus=(num_rollout_workers+1+num_eval_workers)*num_test, num_gpus=1, local_mode=False, include_dashboard=True)
+ray.init(num_cpus=(num_rollout_workers+num_cpus_for_local_worker+num_eval_workers)*num_test, num_gpus=0, local_mode=False, include_dashboard=True)
+
+
+
+
+
+
 result_grid = Tuner(
     SAC_FixAlpha_Parallel,
     param_space=config,
