@@ -3,40 +3,40 @@ import torch.nn.functional as F
 import gym
 import numpy as np
 
-from ray.rllib.models.torch.torch_action_dist import TorchSquashedGaussian,TorchDistributionWrapper
+from ray.rllib.models.torch.torch_action_dist import TorchSquashedGaussian, TorchDistributionWrapper
 
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
-from ray.rllib.utils.numpy import (
-    SMALL_NUMBER, 
-    MIN_LOG_NN_OUTPUT, 
-    MAX_LOG_NN_OUTPUT
-)
+# from ray.rllib.utils.numpy import (
+#     SMALL_NUMBER,
+#     MIN_LOG_NN_OUTPUT,
+#     MAX_LOG_NN_OUTPUT
+# )
 from ray.rllib.utils.typing import TensorType, List, Union, Tuple, ModelConfigDict
 
 torch, nn = try_import_torch()
 
 # numerically stable version of TorchSquashedGaussian
 
-
-# MIN_LOG_NN_OUTPUT=-20
-# MAX_LOG_NN_OUTPUT=2
+SMALL_NUMBER=1e-9
+MIN_LOG_NN_OUTPUT = -20
+MAX_LOG_NN_OUTPUT = 2
 
 
 class SquashedGaussian(TorchSquashedGaussian):
     @override(TorchSquashedGaussian)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)
-        unsquashed_values = self._unsquash(x)  # means `u` in SAC paper
+        u = self._unsquash(x)  # means `u` in SAC paper
         # For safety reasons, clamp somehow, only then sum up.
         log_prob_gaussian = torch.clamp(self.dist.log_prob(
-            unsquashed_values), -100, 100).sum(dim=-1)
+            u), -100, 100).sum(dim=-1)
 
         # Note: use magic code from Spinning-up repo
         log_prob = log_prob_gaussian - 2*torch.sum(
-            np.log(2)-unsquashed_values-F.softplus(-2*unsquashed_values), 
+            np.log(2)-u-F.softplus(-2*u),
             dim=-1)
         return log_prob
 
@@ -44,14 +44,29 @@ class SquashedGaussian(TorchSquashedGaussian):
         z = self.dist.rsample()
         actions = self._squash(z)
 
-
         # For safety reasons, clamp somehow, only then sum up.
-        log_prob_gaussian = torch.clamp(self.dist.log_prob(z), -100, 100).sum(dim=-1)
+        log_prob_gaussian = torch.clamp(
+            self.dist.log_prob(z), -100, 100).sum(dim=-1)
         # Note: use magic code from Spinning-up repo
-        log_prob = log_prob_gaussian - torch.sum(
-            2*np.log(2)-z-F.softplus(-2*z), 
-            dim=-1)
+        log_prob = log_prob_gaussian - 2*torch.sum(
+            np.log(2)-z-F.softplus(-2*z), dim=-1)
         return actions, log_prob
+
+    def _squash(self, raw_values: TensorType) -> TensorType:
+        # Returned values are within [low, high] (including `low` and `high`).
+        squashed = ((torch.tanh(raw_values) + 1.0) / 2.0) * (
+            self.high - self.low
+        ) + self.low
+        return torch.clamp(squashed, self.low, self.high)
+
+    def _unsquash(self, values: TensorType) -> TensorType:
+        normed_values = (values - self.low) / (self.high - self.low) * 2.0 - 1.0
+        # Stabilize input to atanh.
+        save_normed_values = torch.clamp(
+            normed_values, -1.0 + SMALL_NUMBER, 1.0 - SMALL_NUMBER
+        )
+        unsquashed = torch.atanh(save_normed_values)
+        return unsquashed
 
 
 class SquashedGaussian2(TorchDistributionWrapper):
@@ -65,8 +80,6 @@ class SquashedGaussian2(TorchDistributionWrapper):
         self,
         inputs: List[TensorType],
         model: TorchModelV2,
-        low: float = -1.0,
-        high: float = 1.0,
     ):
         """Parameterizes the distribution via `inputs`.
 
@@ -83,9 +96,7 @@ class SquashedGaussian2(TorchDistributionWrapper):
         log_std = torch.clamp(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT)
         std = torch.exp(log_std)
         self.dist = torch.distributions.normal.Normal(mean, std)
-        assert np.all(np.less(low, high))
-        self.low = low
-        self.high = high
+
         self.mean = mean
         self.std = std
 
@@ -106,14 +117,13 @@ class SquashedGaussian2(TorchDistributionWrapper):
     @override(ActionDistribution)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)
-        unsquashed_values = self._unsquash(x)  # means `u` in SAC paper
+        u = self._unsquash(x)
         # For safety reasons, clamp somehow, only then sum up.
-        log_prob_gaussian = torch.clamp(self.dist.log_prob(
-            unsquashed_values), -100, 100).sum(dim=-1)
+        log_prob_gaussian = self.dist.log_prob(u).sum(dim=-1)
 
         # Note: use magic code from Spinning-up repo
         log_prob = log_prob_gaussian - 2*torch.sum(
-            np.log(2)-unsquashed_values-F.softplus(-2*unsquashed_values), 
+            np.log(2)-u-F.softplus(-2*u),
             dim=-1)
         return log_prob
 
@@ -121,13 +131,12 @@ class SquashedGaussian2(TorchDistributionWrapper):
         z = self.dist.rsample()
         actions = self._squash(z)
 
-
         # For safety reasons, clamp somehow, only then sum up.
-        log_prob_gaussian = torch.clamp(self.dist.log_prob(z), -100, 100).sum(dim=-1)
+        log_prob_gaussian = torch.clamp(
+            self.dist.log_prob(z), -100, 100).sum(dim=-1)
         # Note: use magic code from Spinning-up repo
-        log_prob = log_prob_gaussian - torch.sum(
-            2*np.log(2)-z-F.softplus(-2*z), 
-            dim=-1)
+        log_prob = log_prob_gaussian - 2*torch.sum(
+            np.log(2)-z-F.softplus(-2*z), dim=-1)
         return actions, log_prob
 
     @override(TorchDistributionWrapper)
@@ -140,16 +149,13 @@ class SquashedGaussian2(TorchDistributionWrapper):
 
     def _squash(self, raw_values: TensorType) -> TensorType:
         # Returned values are within [low, high] (including `low` and `high`).
-        squashed = ((torch.tanh(raw_values) + 1.0) / 2.0) * (
-            self.high - self.low
-        ) + self.low
-        return torch.clamp(squashed, self.low, self.high)
+
+        return torch.clamp(torch.tanh(raw_values), -1.0, 1.0)
 
     def _unsquash(self, values: TensorType) -> TensorType:
-        normed_values = (values - self.low) / (self.high - self.low) * 2.0 - 1.0
         # Stabilize input to atanh.
         save_normed_values = torch.clamp(
-            normed_values, -1.0 , 1.0 
+            values, -1.0, 1.0
         )
         unsquashed = torch.atanh(save_normed_values)
         return unsquashed

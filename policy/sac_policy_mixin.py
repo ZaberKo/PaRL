@@ -195,7 +195,7 @@ class SACDelayPolicyUpdate:
                         param_indices = self.multi_gpu_param_groups[opt_idx]
                         # for param_idx, param in enumerate(parameters):
                         #     if param_idx in param_indices and param.grad is not None:
-                        #         param.grad.data.zero_()
+                        #         param.grad.zero_()
                         opt.zero_grad()
                         # Recompute gradients of loss over all variables.
                         loss_out[opt_idx].backward()

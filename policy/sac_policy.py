@@ -171,7 +171,7 @@ def build_sac_model_and_action_dist_fix(
 
     assert isinstance(policy.target_model, default_model_cls)
     
-    action_dist_class = SquashedGaussian2
+    action_dist_class = SquashedGaussian
 
     return model, action_dist_class
 
