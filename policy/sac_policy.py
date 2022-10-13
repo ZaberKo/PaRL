@@ -291,7 +291,8 @@ def apply_gradients(policy, gradients) -> None:
     for critic_opt in policy.critic_optims:
         critic_opt.step()
 
-    policy.alpha_optim.step()
+    if hasattr(policy, "alpha_optim"):
+        policy.alpha_optim.step()
 
     # Increment global step & apply ops.
     policy.global_step += 1

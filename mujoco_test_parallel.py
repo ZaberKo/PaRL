@@ -9,6 +9,8 @@ from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+import torch
 
 
 num_test=3
@@ -19,6 +21,15 @@ num_envs_per_worker=1
 rollout_vs_train=1
 
 num_eval_workers=16
+
+class CPUInitCallback(DefaultCallbacks):
+    def on_algorithm_init(self, *, algorithm: "Algorithm", **kwargs) -> None:
+        # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
+        # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker) 
+        # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        torch.set_num_threads(8)
 
 config = SACConfig().framework('torch') \
     .rollouts(
@@ -56,6 +67,7 @@ config = SACConfig().framework('torch') \
         metrics_num_episodes_for_smoothing=5
         ) \
     .environment(env="HalfCheetah-v3")\
+    .callbacks(CPUInitCallback)\
     .to_dict()
 
 
