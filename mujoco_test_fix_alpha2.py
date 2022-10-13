@@ -9,6 +9,8 @@ from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
 
+from ray.rllib.utils.exploration import StochasticSampling
+
 num_tests=3
 num_eval_workers=16
 
@@ -42,8 +44,16 @@ config = SACConfig().framework('torch') \
         evaluation_duration=num_eval_workers*1,
         evaluation_config={
             "no_done_at_end":False,
-            "horizon":None
+            "horizon":None,
+            "num_envs_per_worker": 1,
+            "explore": False # greedy eval
     })\
+    .exploration(
+        exploration_config={
+            "type": StochasticSampling,
+            "random_timesteps": 10000
+        }
+    )\
     .reporting(
         min_time_s_per_iteration=0,
         min_sample_timesteps_per_iteration=1000, # 1000 updates per iteration

@@ -29,7 +29,7 @@ config = SACConfig().framework('torch') \
         horizon=1000,
         soft_horizon=False)\
     .training(
-        initial_alpha=1,
+        initial_alpha=0.2,
         train_batch_size=256,
         training_intensity=256/rollout_vs_train,
         replay_buffer_config={

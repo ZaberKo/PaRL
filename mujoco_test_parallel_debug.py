@@ -3,7 +3,7 @@
 import gym
 import ray
 from ray.rllib.algorithms.sac import SACConfig
-from sac import SAC_Parallel
+from sac import SAC_Parallel, calculate_rr_weights
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
@@ -17,13 +17,13 @@ from tqdm import trange
 
 
 num_rollout_workers=0
-num_envs_per_worker=4
+num_envs_per_worker=1
 
 rollout_vs_train=1
 
 config = SACConfig().framework('torch') \
     .rollouts(
-        # rollout_fragment_length=1, # already set in SAC
+        rollout_fragment_length=40, # already set in SAC
         num_rollout_workers=num_rollout_workers,
         num_envs_per_worker=num_envs_per_worker,
         no_done_at_end=True,
@@ -49,7 +49,8 @@ config = SACConfig().framework('torch') \
         evaluation_config={
             "no_done_at_end":False,
             "horizon":None,
-            "num_envs_per_worker": 1
+            "num_envs_per_worker": 1,
+            "explore": False # greedy eval
     })\
     .reporting(
         min_time_s_per_iteration=0,
@@ -70,7 +71,7 @@ class SAC_FixAlpha_Parallel(SAC_Parallel):
 # trainer=SAC_FixAlpha_Parallel(config=config)
 
 #%%
-# calculate_rr_weights(config)
+print(calculate_rr_weights(config))
 #%%
 
 ray.init(num_cpus=(num_rollout_workers+1+1), num_gpus=1, local_mode=False, include_dashboard=False)
