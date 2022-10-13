@@ -47,7 +47,8 @@ config = SACConfig().framework('torch') \
         evaluation_config={
             "no_done_at_end":False,
             "horizon":None,
-            "num_envs_per_worker": 1
+            "num_envs_per_worker": 1,
+            "explore": False # greedy eval
     })\
     .reporting(
         min_time_s_per_iteration=0,

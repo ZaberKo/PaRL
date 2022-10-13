@@ -6,7 +6,6 @@ import ray
 from ray.rllib.policy.policy_template import build_policy_class
 from ray.rllib.algorithms.sac.sac_torch_policy import (
     optimizer_fn,
-    stats,
     ComputeTDErrorMixin,
     TargetNetworkMixin
 )
@@ -25,12 +24,13 @@ from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from .sac_model import SACTorchModel
-from .sac_policy_mixin import SACEvolveMixin, SACDelayPolicyUpdate
+from .sac_policy_mixin import SACEvolveMixin, SACMod
 from .action_dist import SquashedGaussian, SquashedGaussian2
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
 import gym
 from ray.rllib.policy import Policy, TorchPolicy
+from ray.rllib.policy.torch_policy import _directStepOptimizerSingleton
 from ray.rllib.utils.typing import (
     TensorType,
     AlgorithmConfigDict,
@@ -123,7 +123,7 @@ def build_sac_model_and_action_dist_fix(
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> Tuple[ModelV2, Type[TorchDistributionWrapper]]:
-        # Force-ignore any additionally provided hidden layer sizes.
+    # Force-ignore any additionally provided hidden layer sizes.
     # Everything should be configured using SAC's `q_model_config` and
     # `policy_model_config` config settings.
     policy_model_config = copy.deepcopy(MODEL_DEFAULTS)
@@ -170,10 +170,38 @@ def build_sac_model_and_action_dist_fix(
     )
 
     assert isinstance(policy.target_model, default_model_cls)
-    
+
     action_dist_class = SquashedGaussian
 
     return model, action_dist_class
+
+
+def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
+    """Stats function for SAC. Returns a dict with important loss stats.
+
+    Args:
+        policy: The Policy to generate stats for.
+        train_batch: The SampleBatch (already) used for training.
+
+    Returns:
+        Dict[str, TensorType]: The stats dict.
+    """
+    q_t = torch.stack(policy.get_tower_stats("q_t"))
+
+    return {
+        "actor_loss": torch.mean(torch.stack(policy.get_tower_stats("actor_loss"))),
+        "critic_loss": torch.mean(
+            torch.stack(tree.flatten(policy.get_tower_stats("critic_loss")))
+        ),
+        "alpha_loss": torch.mean(torch.stack(policy.get_tower_stats("alpha_loss"))),
+        "alpha_value": torch.exp(policy.model.log_alpha),
+        "log_alpha_value": policy.model.log_alpha,
+        "target_entropy": policy.model.target_entropy,
+        "policy_t": torch.mean(torch.stack(policy.get_tower_stats("policy_t"))),
+        "mean_q": torch.mean(q_t),
+        "max_q": torch.max(q_t),
+        "min_q": torch.min(q_t),
+    }
 
 
 def stats_no_alpha(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
@@ -209,10 +237,13 @@ def setup_late_mixins(
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> None:
-    SACDelayPolicyUpdate.__init__(policy)
+    # SACMod.__init__(policy)
     ComputeTDErrorMixin.__init__(policy)
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
+
+    # used in apply_gradients()
+    policy.global_step = 0
 
 
 def record_grads(
@@ -240,14 +271,30 @@ def record_grads(
                 for p in params
             ]), p=2).cpu().numpy()
 
-    if policy.actor_optim==optimizer:
+    if policy.actor_optim == optimizer:
         return {"actor_grad_gnorm": grad_gnorm}
-    elif policy.critic_optims[0]==optimizer:
+    elif policy.critic_optims[0] == optimizer:
         return {"critic_grad_gnorm": grad_gnorm}
-    elif policy.critic_optims[1]==optimizer:
+    elif policy.critic_optims[1] == optimizer:
         return {"twin_critic_grad_gnorm": grad_gnorm}
     else:
         return {}
+
+
+def apply_gradients(policy, gradients) -> None:
+    assert gradients == _directStepOptimizerSingleton
+    # For policy gradient, update policy net one time v.s.
+    # update critic net `policy_delay` time(s).
+    if policy.global_step % policy.config.get("policy_delay", 1) == 0:
+        policy.actor_optim.step()
+
+    for critic_opt in policy.critic_optims:
+        critic_opt.step()
+
+    policy.alpha_optim.step()
+
+    # Increment global step & apply ops.
+    policy.global_step += 1
 
 
 # Build a child class of `TorchPolicy`, given the custom functions defined
@@ -265,8 +312,9 @@ SACPolicy = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
+    apply_gradients_fn=apply_gradients
 )
 
 
@@ -284,7 +332,7 @@ SACPolicy_FixedAlpha = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACDelayPolicyUpdate, TargetNetworkMixin,
-            ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
+    apply_gradients_fn=apply_gradients
 )

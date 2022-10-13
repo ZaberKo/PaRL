@@ -14,7 +14,7 @@ from ray.rllib.utils import deep_update
 import threading
 
 
-from typing import List,Tuple
+from typing import List, Tuple
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.utils.typing import (
     AlgorithmConfigDict,
@@ -51,10 +51,8 @@ class SACEvolveMixin:
 
         self.model.action_model.load_state_dict(state_dict, strict=False)
 
-class SACDelayPolicyUpdate:
-    def __init__(self) -> None:
-        self.global_step=0
 
+class SACMod:
     # fix grad_info missing issue
     def learn_on_loaded_batch(self: TorchPolicy, offset: int = 0, buffer_index: int = 0):
         if not self._loaded_batches[buffer_index]:
@@ -82,7 +80,7 @@ class SACDelayPolicyUpdate:
                 batch = self._loaded_batches[0][0]
             else:
                 batch = self._loaded_batches[0][0][offset: offset +
-                                                device_batch_size]
+                                                   device_batch_size]
             return self.learn_on_batch(batch)
 
         if len(self.devices) > 1:
@@ -135,7 +133,7 @@ class SACDelayPolicyUpdate:
         for i, (model, batch) in enumerate(zip(self.model_gpu_towers, device_batches)):
             batch_fetches[f"tower_{i}"].update(
                 {
-                    LEARNER_STATS_KEY: dict(**tower_outputs[i][1],**self.extra_grad_info(batch)),
+                    LEARNER_STATS_KEY: dict(**tower_outputs[i][1], **self.extra_grad_info(batch)),
                     "model": model.metrics(),
                 }
             )
@@ -143,7 +141,6 @@ class SACDelayPolicyUpdate:
         batch_fetches.update(self.extra_compute_grad_fetches())
 
         return batch_fetches
-
 
     def _multi_gpu_parallel_grad_calc(
         self, sample_batches: List[SampleBatch]
@@ -231,7 +228,8 @@ class SACDelayPolicyUpdate:
                                     if p.grad is not None:
                                         p.grad /= self.distributed_world_size
 
-                            grad_info["allreduce_latency"] += time.time() - start
+                            grad_info["allreduce_latency"] += time.time() - \
+                                start
 
                 with lock:
                     results[shard_idx] = (all_grads, grad_info)
@@ -265,7 +263,8 @@ class SACDelayPolicyUpdate:
         else:
             threads = [
                 threading.Thread(
-                    target=_worker, args=(shard_idx, model, sample_batch, device)
+                    target=_worker, args=(
+                        shard_idx, model, sample_batch, device)
                 )
                 for shard_idx, (model, sample_batch, device) in enumerate(
                     zip(self.model_gpu_towers, sample_batches, self.devices)
@@ -288,16 +287,3 @@ class SACDelayPolicyUpdate:
 
 
 
-    def apply_gradients(self) -> None:
-        # For policy gradient, update policy net one time v.s.
-        # update critic net `policy_delay` time(s).
-        for critic_opt in self.critic_optims:
-            critic_opt.step()
-
-        self.alpha_optim.step()
-
-        if self.global_step % self.config["policy_delay"] == 0:
-            self._actor_optimizer.step()
-
-        # Increment global step & apply ops.
-        self.global_step += 1
