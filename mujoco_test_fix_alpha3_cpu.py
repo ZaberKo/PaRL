@@ -1,37 +1,27 @@
 # %%
-import numpy as np
 import gym
 import ray
-from ray.rllib.algorithms.sac import  SACConfig
+from ray.rllib.algorithms.sac import SACConfig
 from sac import SAC_Parallel
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
 from policy import SACPolicy,SACPolicy_FixedAlpha
+
+from ray.rllib.utils.exploration import StochasticSampling
+
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
-import os
 import torch
 
-num_test=3
-
-num_rollout_workers=0
-num_envs_per_worker=5
-rollout_fragment_length=10
-
-num_cpus_for_local_worker=8
-num_cpus_for_rollout_worker=4
+num_tests=3
+num_eval_workers=16
 
 rollout_vs_train=1
 
-num_eval_workers=16
-
-
-from ray.rllib.algorithms import Algorithm
-
+num_cpus_for_local_worker=16
 class CPUInitCallback(DefaultCallbacks):
-    def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
-        # ============ driver worker multi-thread ==========
+    def on_algorithm_init(self, *, algorithm: "Algorithm", **kwargs) -> None:
         # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
         # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
         # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
@@ -39,20 +29,13 @@ class CPUInitCallback(DefaultCallbacks):
         # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
         torch.set_num_threads(num_cpus_for_local_worker)
 
-        # ============ rollout worker multi-thread ==========
-        def set_rollout_num_threads(worker):
-            torch.set_num_threads(num_cpus_for_rollout_worker)
-
-        pendings=[w.apply.remote(set_rollout_num_threads) for w in algorithm.workers.remote_workers()]
-        ray.wait(pendings, num_returns=len(pendings))
-
-
 
 config = SACConfig().framework('torch') \
     .rollouts(
-        rollout_fragment_length=rollout_fragment_length, # already set in SAC
-        num_rollout_workers=num_rollout_workers,
-        num_envs_per_worker=num_envs_per_worker,
+        # rollout_fragment_length=1, # already set in SAC
+        num_rollout_workers=0,
+        num_envs_per_worker=1,
+        rollout_fragment_length=50,
         no_done_at_end=True,
         horizon=1000,
         soft_horizon=False)\
@@ -63,14 +46,13 @@ config = SACConfig().framework('torch') \
         replay_buffer_config={
         "_enable_replay_buffer_api": True,
         "type": "MultiAgentReplayBuffer",
-        "capacity": int(1e6),
+        "capacity": int(1e5),
         # How many steps of the model to sample before learning starts.
         "learning_starts": 10000,
     })\
     .resources(
         num_gpus=0,
-        num_cpus_for_local_worker=num_cpus_for_local_worker,
-        num_cpus_per_worker=num_cpus_for_rollout_worker
+        num_cpus_for_local_worker=num_cpus_for_local_worker
     )\
     .evaluation(
         evaluation_interval=10, 
@@ -80,9 +62,14 @@ config = SACConfig().framework('torch') \
             "no_done_at_end":False,
             "horizon":None,
             "num_envs_per_worker": 1,
-            "explore": False,
-            "num_cpus_per_worker": 1
+            "explore": False # greedy eval
     })\
+    .exploration(
+        exploration_config={
+            "type": StochasticSampling,
+            "random_timesteps": 10000
+        }
+    )\
     .reporting(
         min_time_s_per_iteration=0,
         min_sample_timesteps_per_iteration=1000, # 1000 updates per iteration
@@ -93,31 +80,29 @@ config = SACConfig().framework('torch') \
     .to_dict()
 
 
-class SAC_FixAlpha_Parallel(SAC_Parallel):
-    def get_default_policy_class(self, config):
+#%%
+# from sac import calculate_rr_weights
+# calculate_rr_weights(config)
+
+#%%
+class SAC_FixAlpha(SAC_Parallel):
+    def get_default_policy_class(
+        self, config):
         return SACPolicy_FixedAlpha
 
-#%%
-# from ray.rllib.utils.debug import summarize
-
-# trainer=SAC_FixAlpha_Parallel(config=config)
-# print(summarize(trainer.config))
-#%%
-
-ray.init(num_cpus=(num_rollout_workers*num_cpus_for_rollout_worker+num_cpus_for_local_worker+num_eval_workers)*num_test, num_gpus=0, local_mode=False, include_dashboard=True)
-
-
+ray.init(num_cpus=(num_eval_workers+num_cpus_for_local_worker)*num_tests, num_gpus=1, local_mode=False, include_dashboard=True)
 result_grid = Tuner(
-    SAC_FixAlpha_Parallel,
+    SAC_FixAlpha,
     param_space=config,
     tune_config=TuneConfig(
-        num_samples=num_test
+        num_samples=num_tests
     ),
     run_config=RunConfig(
+        local_dir="~/ray_results",
         stop={"training_iteration": 3000}, # this will results in 1e6 updates
         checkpoint_config=CheckpointConfig(
             num_to_keep=None,  # save all checkpoints
-            checkpoint_frequency=10
+            checkpoint_frequency=100
         )
     )
 ).fit()
