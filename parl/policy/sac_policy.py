@@ -14,10 +14,7 @@ from ray.rllib.algorithms.sac.sac_tf_policy import (
     postprocess_trajectory,
     validate_spaces,
 )
-from ray.rllib.utils.torch_utils import (
-    apply_grad_clipping,
-    concat_multi_gpu_td_errors,
-)
+
 from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 
 
@@ -188,12 +185,11 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
     """
     q_t = torch.stack(policy.get_tower_stats("q_t"))
 
-    return {
+    states = {
         "actor_loss": torch.mean(torch.stack(policy.get_tower_stats("actor_loss"))),
         "critic_loss": torch.mean(
             torch.stack(tree.flatten(policy.get_tower_stats("critic_loss")))
         ),
-        "alpha_loss": torch.mean(torch.stack(policy.get_tower_stats("alpha_loss"))),
         "alpha_value": torch.exp(policy.model.log_alpha),
         "log_alpha_value": policy.model.log_alpha,
         "target_entropy": policy.model.target_entropy,
@@ -203,33 +199,39 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
         "min_q": torch.min(q_t),
     }
 
+    if hasattr(policy, "alpha_optim"):
+        states["alpha_loss"]= torch.mean(torch.stack(policy.get_tower_stats("alpha_loss")))
 
-def stats_no_alpha(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
-    """Stats function for SAC. Returns a dict with important loss stats.
+    return states
+
+
+
+def concat_multi_gpu_td_errors(
+    policy: Union["TorchPolicy", "TorchPolicyV2"]
+) -> Dict[str, TensorType]:
+    """Concatenates multi-GPU (per-tower) TD error tensors given TorchPolicy.
+
+    TD-errors are extracted from the TorchPolicy via its tower_stats property.
 
     Args:
-        policy: The Policy to generate stats for.
-        train_batch: The SampleBatch (already) used for training.
+        policy: The TorchPolicy to extract the TD-error values from.
 
     Returns:
-        Dict[str, TensorType]: The stats dict.
+        A dict mapping strings "td_error" and "mean_td_error" to the
+        corresponding concatenated and mean-reduced values.
     """
-    q_t = torch.stack(policy.get_tower_stats("q_t"))
-
+    td_error = torch.cat(
+        [
+            t.tower_stats.get("td_error", torch.tensor([0.0])).to(policy.device)
+            for t in policy.model_gpu_towers
+        ],
+        dim=0,
+    )
+    policy.td_error = td_error
     return {
-        "actor_loss": torch.mean(torch.stack(policy.get_tower_stats("actor_loss"))),
-        "critic_loss": torch.mean(
-            torch.stack(tree.flatten(policy.get_tower_stats("critic_loss")))
-        ),
-        "alpha_value": torch.exp(policy.model.log_alpha),
-        "log_alpha_value": policy.model.log_alpha,
-        "target_entropy": policy.model.target_entropy,
-        "policy_t": torch.mean(torch.stack(policy.get_tower_stats("policy_t"))),
-        "mean_q": torch.mean(q_t),
-        "max_q": torch.max(q_t),
-        "min_q": torch.min(q_t),
+        # "td_error": td_error,
+        "mean_td_error": torch.mean(td_error),
     }
-
 
 def setup_late_mixins(
     policy: Policy,
@@ -272,11 +274,13 @@ def record_grads(
             ]), p=2).cpu().numpy()
 
     if policy.actor_optim == optimizer:
-        return {"actor_grad_gnorm": grad_gnorm}
+        return {"actor_gnorm": grad_gnorm}
     elif policy.critic_optims[0] == optimizer:
-        return {"critic_grad_gnorm": grad_gnorm}
+        return {"critic_gnorm": grad_gnorm}
     elif policy.critic_optims[1] == optimizer:
-        return {"twin_critic_grad_gnorm": grad_gnorm}
+        return {"twin_critic_gnorm": grad_gnorm}
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
+        return {"alpha_optim_gnorm": grad_gnorm}
     else:
         return {}
 
@@ -324,7 +328,7 @@ SACPolicy_FixedAlpha = build_policy_class(
     framework="torch",
     loss_fn=actor_critic_loss_no_alpha,
     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
-    stats_fn=stats_no_alpha,
+    stats_fn=stats,
     postprocess_fn=postprocess_trajectory,
     # extra_grad_process_fn=apply_grad_clipping,
     extra_grad_process_fn=record_grads,

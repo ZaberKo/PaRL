@@ -1,7 +1,6 @@
 import numpy as np
 
-from ea.neuroevolution import NeuroEvolution
-from utils import compute_ranks
+from parl.ea.neuroevolution import NeuroEvolution
 
 from ray.rllib.evaluation import RolloutWorker
 from ray.rllib.evaluation.worker_set import WorkerSet
@@ -11,8 +10,8 @@ from ray.rllib.utils.annotations import override
 
 
 class CEM(NeuroEvolution):
-    def __init__(self, config, pop_workers: WorkerSet, target_workers: WorkerSet):
-        NeuroEvolution.__init__(self, config, pop_workers, target_workers)
+    def __init__(self, config, pop_workers: WorkerSet, target_worker: RolloutWorker):
+        super().__init__(config, pop_workers, target_worker)
 
         self.num_elites = round(config["elite_fraction"]*self.pop_size)
         self.noise_decay_coeff = config["noise_decay_coeff"]
@@ -20,12 +19,11 @@ class CEM(NeuroEvolution):
         self.noise_end = config["noise_end"]
 
         # initialize pop
-        local_target_worker = self.target_workers.local_worker()
-        target_weights = self.get_evolution_weights(local_target_worker)
+        target_weights = self.get_evolution_weights(self.target_worker)
         self.params_shape = {}
         self.params_size = {}
 
-        for name, param in self.mean.items():
+        for name, param in target_weights.items():
             self.params_shape[name] = param.shape
             self.params_size[name] = param.size
         self.num_params = sum(self.params_size.values())
@@ -55,12 +53,10 @@ class CEM(NeuroEvolution):
 
         super().sync_pop_weights()
 
-
-
     def flatten_weights(self, weights: ModelWeights) -> np.ndarray:
         # only need learnable weights in policy(actor)
         param_list = []
-        for param in weights.values:
+        for param in weights.values():
             param_list.append(param.flatten())
 
         weights_flat = np.concatenate(param_list)
@@ -73,37 +69,51 @@ class CEM(NeuroEvolution):
         pos = 0
         weights = {}
         for name, size in self.params_size.items():
-            weights[name] = weights_flat[pos:pos+size].reshape(self.params_shape[name])
+            weights[name] = weights_flat[pos:pos +
+                                         size].reshape(self.params_shape[name])
             pos += size
 
         assert pos == self.num_params
 
         return weights
 
-    def evolve(self, fitnesses):
+    @override(NeuroEvolution)
+    def _evolve(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
         orders = fitnesses.argsort()
-        elite_ids=orders[:self.num_elites]
+        elite_ids = orders[:self.num_elites]
 
-        with self.load_target_weights_timer:
-            target_weights = self.get_evolution_weights(
-                self.target_workers.local_worker())
-            target_weights_flat = self.flatten_weights(target_weights)
+        target_weights = self.get_evolution_weights()
+        target_weights_flat = self.flatten_weights(target_weights)
 
-        with self.evolve_timer:
-            # update mean
-            mean = target_weights_flat * self.ws[0] + np.dot(self.pop_flat[elite_ids],self.ws[1:])
+        # update mean
+        mean = self.ws[0] * target_weights_flat + np.dot(
+            self.ws[1:], self.pop_flat[elite_ids])
 
-            # update variance
-            variance=np.full(self.num_params,self.noise) + np.dot(
-                np.power(self.pop_flat[elite_ids]-self.mean,2),
-                self.ws[1:])
-            
-            self.mean=mean
-            self.variance=variance
-            self.noise=self.noise_decay_coeff*self.noise + (1-self.noise_decay_coeff)*self.noise_end
+        # update variance
+        variance = np.full(self.num_params, self.noise) + np.dot(
+            self.ws[1:], np.power(self.pop_flat[elite_ids]-self.mean, 2))
+
+        self.mean = mean
+        self.variance = variance
+        self.noise = self.noise_decay_coeff*self.noise + \
+            (1-self.noise_decay_coeff)*self.noise_end
 
         # generate new pop
         self.generate_pop()
         self.sync_pop_weights()
-            
+
+    @override(NeuroEvolution)
+    def get_iteration_results(self):
+        data = super().get_iteration_results()
+
+        data.update({
+            "fitness": self.fitnesses,
+            "var_noise": self.noise,
+            "pop_var_mean": np.mean(self.variance),
+            "pop_var_max": np.max(self.variance),
+            "pop_var_min": np.min(self.variance),
+            "target_pop_diff_norm": np.linalg.norm(self.target_weights-self.mean,ord=2)
+        })
+
+        return data

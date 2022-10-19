@@ -1,3 +1,4 @@
+from tqdm import trange
 import logging
 import copy
 import platform
@@ -7,7 +8,7 @@ import numpy as np
 import ray
 
 from ray.rllib.algorithms import Algorithm
-from ray.rllib.algorithms.sac import SAC
+from ray.rllib.algorithms.sac import SAC, SACConfig
 
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
@@ -29,11 +30,10 @@ from ray.rllib.utils.metrics import (
     SYNCH_WORKER_WEIGHTS_TIMER,
     TARGET_NET_UPDATE_TIMER,
 )
-from rollout import synchronous_parallel_sample, flatten_batches
-from learner_thread import MultiGPULearnerThread
-from ea import NeuroEvolution, CEM
-from parl_config import PaRLConfig
-from policy import SACPolicy
+from .rollout import synchronous_parallel_sample, flatten_batches
+from .learner_thread import MultiGPULearnerThread
+from .ea import NeuroEvolution, CEM
+from .policy import SACPolicy
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
@@ -63,6 +63,92 @@ logger = logging.getLogger(__name__)
 NUM_SAMPLES_ADDED_TO_QUEUE = "num_samples_added_to_queue"
 SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
 
+FITNESS = "fitness"
+
+
+class PaRLConfig(SACConfig):
+    def __init__(self, algo_class=None):
+        super().__init__(algo_class=algo_class or PaRL)
+
+        self.q_model_config = {
+            "fcnet_hiddens": [256, 256],
+            "fcnet_activation": "relu",
+            "post_fcnet_hiddens": [],
+            "post_fcnet_activation": None,
+            "custom_model": None,  # Use this to define custom Q-model(s).
+            "custom_model_config": {},
+        }
+        self.policy_model_config = {
+            "fcnet_hiddens": [256, 256],
+            "fcnet_activation": "relu",
+            "post_fcnet_hiddens": [],
+            "post_fcnet_activation": None,
+            "custom_model": None,  # Use this to define a custom policy model.
+            "custom_model_config": {},
+        }
+
+        self.store_buffer_in_checkpoints = False
+        self.replay_buffer_config = {
+            "type": "MultiAgentReplayBuffer",
+            "capacity": int(1e6),
+            "learning_starts": 50000,
+            # "no_local_replay_buffer": True,
+            "replay_buffer_shards_colocated_with_driver": False,
+            # "num_replay_buffer_shards": 1
+        }
+
+        self.optimization = {
+            "actor_learning_rate": 3e-4,
+            "critic_learning_rate": 3e-4,
+            "entropy_learning_rate": 3e-4,
+        }
+
+        self.episodes_per_worker = 1
+
+        # EA config
+        self.pop_size = 10
+        self.pop_config = {
+            # "explore": True,
+            # "batch_mode": "complete_episodes",
+            # "rollout_fragment_length": 1
+        }
+
+        self.ea_config = {
+            "elite_fraction": 0.5,
+            "noise_decay_coeff": 0.95,
+            "noise_init": 1e-3,
+            "noise_end": 1e-5
+        }
+
+        # training config
+        self.n_step = 1
+        self.initial_alpha = 1.0
+        self.tau = 0.005
+        self.normalize_actions = True
+        self.policy_delay = 1
+
+        # learner thread config
+        self.num_multi_gpu_tower_stacks = 8
+        self.learner_queue_size = 16
+        self.num_data_load_threads = 16
+
+        self.target_network_update_freq = 1  # unit: iteration
+
+        # reporting
+        self.metrics_episode_collection_timeout_s = 60.0
+        self.metrics_num_episodes_for_smoothing = 5
+        self.min_time_s_per_iteration = 0
+        self.min_sample_timesteps_per_iteration = 0
+        self.min_train_timesteps_per_iteration = 500
+
+        # default_resources
+        self.num_cpus_per_worker = 1
+        self.num_envs_per_worker = 1
+        self.num_cpus_for_local_worker = 1
+        self.num_gpus_per_worker = 0
+
+        self.framework("torch")
+
 
 def make_learner_thread(local_worker, config):
     logger.info(
@@ -82,6 +168,11 @@ def make_learner_thread(local_worker, config):
 
 
 class PaRL(SAC):
+    _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
+        ["pop_config", "ea_config"]
+    _override_all_subkeys_if_type_changes = SAC._override_all_subkeys_if_type_changes + \
+        ["pop_config", "ea_config"]
+
     @override(Algorithm)
     def setup(self, config: PartialAlgorithmConfigDict):
         super().setup(config)
@@ -100,7 +191,7 @@ class PaRL(SAC):
 
         self.ea_config = self.config["ea_config"]
         self.evolver: NeuroEvolution = CEM(
-            self.ea_config, self.pop_workers)
+            self.ea_config, self.pop_workers, self.workers.local_worker())
 
         # ========== remote replay buffer ========
 
@@ -139,6 +230,7 @@ class PaRL(SAC):
 
         self.num_updates_since_last_target_update = 0
 
+    @override(SAC)
     def training_step(self) -> ResultDict:
         train_batch_size = self.config["train_batch_size"]
         local_worker = self.workers.local_worker()
@@ -169,7 +261,8 @@ class PaRL(SAC):
         }
 
         # step 3: sample batches from replay buffer and place them on learner queue
-        num_train_batches = round(ts/train_batch_size)
+        # num_train_batches = round(ts/train_batch_size)
+        num_train_batches = 1000
         for _ in range(num_train_batches):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(train_batch_size)
@@ -186,7 +279,7 @@ class PaRL(SAC):
             )
 
         # step 4: apply NE
-        fitnesses = self.calc_fitness(pop_sample_batches)
+        fitnesses = self._calc_fitness(pop_sample_batches)
         self.evolver.evolve(fitnesses)
         with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
             # set pop workers with new generated indv weights
@@ -201,7 +294,10 @@ class PaRL(SAC):
         # )
 
         # step 5: retrieve train_results from learner thread and update target network
-        train_results = self.process_trained_results()
+        train_results = self._process_trained_results()
+        train_results.update({
+            "ea_results": self.evolver.get_iteration_results()
+        })
 
         # step 6: sync target agent weights to rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
@@ -212,7 +308,7 @@ class PaRL(SAC):
         # Return all collected metrics for the iteration.
         return train_results
 
-    def process_trained_results(self) -> ResultDict:
+    def _process_trained_results(self) -> ResultDict:
         # Get learner outputs/stats from output queue.
         # and update the target network
         learner_infos = []
@@ -225,7 +321,7 @@ class PaRL(SAC):
                     env_steps,
                     learner_results,
                 ) = self._learner_thread.outqueue.get()
-                self.update_target_networks()
+                self._update_target_networks()
                 num_env_steps_trained += env_steps
                 num_agent_steps_trained += env_steps
                 if learner_results:
@@ -247,7 +343,7 @@ class PaRL(SAC):
         self._counters[NUM_AGENT_STEPS_TRAINED] += num_agent_steps_trained
         return final_learner_info
 
-    def update_target_networks(self):
+    def _update_target_networks(self):
         local_worker = self.workers.local_worker()
         # Update target network every `target_network_update_freq` training update.
         self.num_updates_since_last_target_update += 1
@@ -265,7 +361,7 @@ class PaRL(SAC):
                 else NUM_ENV_STEPS_TRAINED
             ]
 
-    def calc_fitness(self, sample_batches):
+    def _calc_fitness(self, sample_batches):
         if self.pop_size != len(sample_batches):
             raise ValueError(
                 "sample_batches must contains `pop_size` workers' batches")
@@ -284,6 +380,9 @@ class PaRL(SAC):
         result["info"].update(
             self._learner_thread.stats()
         )
+        result["info"].update(
+            self.evolver.stats()
+        )
         return result
 
     @override(SAC)
@@ -293,20 +392,20 @@ class PaRL(SAC):
         if config["framework"] != "torch":
             raise ValueError("Current only support PyTorch!")
 
-        if config["num_workers"] <= 0:
-            raise ValueError("`num_workers` for PaRL must be >= 1!")
-        
-        if config["pop_size"]<=0: 
-            raise ValueError("`pop_size` must be >=1")
-        elif round(config["pop_size"]*config["elite_fraction"])<=0:
-            raise ValueError(f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
+        # if config["num_workers"] <= 0:
+        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
 
-        if config["evaluation_interval"]<=0:
+        if config["pop_size"] <= 0:
+            raise ValueError("`pop_size` must be >=1")
+        elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
+            raise ValueError(
+                f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
+
+        if config["evaluation_interval"] <= 0:
             raise ValueError("evaluation_interval must >=1")
-        
-    
-    @override(SAC)
+
     @classmethod
+    @override(SAC)
     def get_default_config(cls) -> AlgorithmConfigDict:
         return PaRLConfig().to_dict()
 
@@ -315,18 +414,18 @@ class PaRL(SAC):
         self, config: PartialAlgorithmConfigDict
     ) -> Optional[Type[Policy]]:
         return SACPolicy
-        
-    @override(Algorithm)
+
     @classmethod
+    @override(Algorithm)
     def default_resource_request(cls, config):
         config = dict(cls.get_default_config(), **config)
-        pop_config=merge_dicts(config, config["pop_config"])
-        eval_config=merge_dicts(config,config["evaluation_config"])
+        pop_config = merge_dicts(config, config["pop_config"])
+        eval_config = merge_dicts(config, config["evaluation_config"])
 
-        bundles=[]
-        
+        bundles = []
+
         # driver worker
-        bundles+=[
+        bundles += [
             {
                 "CPU": config["num_cpus_for_driver"],
                 "GPU": 0 if config["_fake_gpus"] else config["num_gpus"]
@@ -334,7 +433,7 @@ class PaRL(SAC):
         ]
 
         # target_workers
-        bundles+=[
+        bundles += [
             {
                 # RolloutWorkers.
                 "CPU": config["num_cpus_per_worker"],
@@ -345,7 +444,7 @@ class PaRL(SAC):
         ]
 
         # pop_workers
-        bundles+=[
+        bundles += [
             {
                 # RolloutWorkers.
                 "CPU": pop_config["num_cpus_per_worker"],
@@ -356,7 +455,7 @@ class PaRL(SAC):
         ]
 
         # eval_workers
-        bundles+=[
+        bundles += [
             {
                 # RolloutWorkers.
                 "CPU": eval_config["num_cpus_per_worker"],
@@ -366,4 +465,4 @@ class PaRL(SAC):
             for _ in range(config["evaluation_num_workers"])
         ]
 
-        return PlacementGroupFactory(bundles=bundles,strategy=config.get("placement_strategy","PACK"))
+        return PlacementGroupFactory(bundles=bundles, strategy=config.get("placement_strategy", "PACK"))

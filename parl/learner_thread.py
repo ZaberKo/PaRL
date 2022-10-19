@@ -9,7 +9,7 @@ from ray.rllib.evaluation.rollout_worker import RolloutWorker
 from ray.rllib.utils.metrics.learner_info import LearnerInfoBuilder, LEARNER_INFO
 from ray.rllib.utils.metrics.window_stat import WindowStat
 from ray.rllib.utils.framework import try_import_tf
-from utils import timer_to_ms
+from .utils import timer_to_ms
 
 from typing import Dict
 
@@ -34,8 +34,8 @@ class MultiGPULearnerThread(threading.Thread):
         self.inqueue = queue.Queue(maxsize=learner_queue_size)
         self.outqueue = queue.Queue()
 
-        self.queue_timer = None
-        self.load_timer = None
+        self.queue_timer = _Timer()
+        self.load_timer = _Timer()
         self.grad_timer = _Timer()
         self.load_wait_timer = _Timer()
 
@@ -123,7 +123,7 @@ class MultiGPULearnerThread(threading.Thread):
         self.outqueue.put((num_steps_trained_this_iter, self.learner_info))
         self.learner_queue_size.push(self.inqueue.qsize())
 
-    def stats(self, result: Dict) -> Dict:
+    def stats(self) -> Dict:
         """Add internal metrics to a result dict."""
 
         data={

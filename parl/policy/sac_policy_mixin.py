@@ -1,27 +1,18 @@
-from ray.rllib.utils.typing import ModelWeights
+import time
+import threading
+import torch
+
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
-
-from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
-from ray.rllib.policy.torch_policy import TorchPolicy, _directStepOptimizerSingleton
-
-import time
-import torch
-import numpy as np
-
 from ray.rllib.utils import NullContextManager, force_list
-from ray.rllib.utils import deep_update
-import threading
-
 
 from typing import List, Tuple
+from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
+from ray.rllib.policy.torch_policy import TorchPolicy, _directStepOptimizerSingleton
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.utils.typing import (
-    AlgorithmConfigDict,
     GradInfoDict,
-    ModelGradients,
     ModelWeights,
-    TensorStructType,
     TensorType,
 )
 

@@ -16,7 +16,7 @@ no_done_at_end: true
 
 # ============== target config==========
 num_workers: 1 # number of workers for target policy
-num_gpus: 1
+num_gpus: 0
 
 batch_mode: complete_episodes
 rollout_fragment_length: 1

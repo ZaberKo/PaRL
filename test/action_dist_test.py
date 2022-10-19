@@ -1,5 +1,5 @@
 # %%
-from policy.action_dist import SquashedGaussian2
+from parl.policy.action_dist import SquashedGaussian2
 import numpy as np
 
 import torch

@@ -1,0 +1,181 @@
+import os
+import pickle
+import time
+from ruamel.yaml import YAML
+import ray
+import torch
+
+from ray.tune import Tuner, TuneConfig
+from ray.air import RunConfig, CheckpointConfig
+from ray.rllib.algorithms.sac import SACConfig
+from parl.sac import SAC_Parallel
+from parl.policy import SACPolicy, SACPolicy_FixedAlpha
+
+from ray.rllib.utils.exploration import StochasticSampling
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.algorithms import Algorithm
+
+import argparse
+from dataclasses import dataclass
+from typing import Union
+
+
+class SAC_FixAlpha(SAC_Parallel):
+    def get_default_policy_class(
+            self, config):
+        return SACPolicy_FixedAlpha
+
+
+class SAC_TuneAlpha(SAC_Parallel):
+    def get_default_policy_class(
+            self, config):
+        return SACPolicy
+
+
+@dataclass
+class Config:
+    env: str= "HalfCheetah-v3"
+
+    num_rollout_workers:int = 0
+    num_eval_workers:int = 16
+
+    rollout_fragment_length:int = 50
+    enable_multiple_updates:bool = True
+    rollout_vs_train:Union[int, float] = 1
+
+    num_cpus_for_local_worker:int = 1
+    num_cpus_for_rollout_worker:int = 1
+
+    use_gpu:bool = True
+    autotune_alpha:bool = False
+
+    num_tests:int = 3
+    training_iteration:int = 3000
+    checkpoint_freq:int = 10
+    evaluation_interval:int = 10
+
+    save_folder:str = "results"
+
+    def resources(self):
+        num_cpus=(self.num_rollout_workers*self.num_cpus_for_rollout_worker +
+                  self.num_cpus_for_local_worker+self.num_eval_workers)*self.num_tests
+        num_gpus=1 if self.use_gpu else 0
+        return num_cpus, num_gpus
+
+def main(_config):
+    config = Config(**_config)
+
+    class CPUInitCallback(DefaultCallbacks):
+        def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
+            # ============ driver worker multi-thread ==========
+            # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
+            # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
+            # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
+            # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker)
+            # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
+            torch.set_num_threads(config.num_cpus_for_local_worker)
+
+            # ============ rollout worker multi-thread ==========
+            def set_rollout_num_threads(worker):
+                torch.set_num_threads(config.num_cpus_for_rollout_worker)
+
+            pendings = [w.apply.remote(set_rollout_num_threads)
+                        for w in algorithm.workers.remote_workers()]
+            ray.wait(pendings, num_returns=len(pendings))
+
+    sac_config = SACConfig().framework('torch') \
+        .rollouts(
+            num_rollout_workers=config.num_rollout_workers,
+            num_envs_per_worker=1,
+            rollout_fragment_length=config.rollout_fragment_length,
+            no_done_at_end=True,
+            horizon=1000,
+            soft_horizon=False
+    )\
+        .training(
+            initial_alpha=0.2,
+            train_batch_size=256,
+            training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
+            replay_buffer_config={
+                "_enable_replay_buffer_api": True,
+                "type": "MultiAgentReplayBuffer",
+                "capacity": int(1e6),
+                # How many steps of the model to sample before learning starts.
+                "learning_starts": 10000,
+            }) \
+        .resources(
+            num_gpus=1/config.num_tests if config.use_gpu else 0,
+            num_cpus_for_local_worker=config.num_cpus_for_local_worker,
+            num_cpus_per_worker=config.num_cpus_for_rollout_worker
+    )\
+        .evaluation(
+            evaluation_interval=config.evaluation_interval,
+            evaluation_num_workers=config.num_eval_workers,
+            evaluation_duration=config.num_eval_workers*1,
+            evaluation_config={
+                "no_done_at_end": False,
+                "horizon": None,
+                "num_envs_per_worker": 1,
+                "explore": False  # greedy eval
+            }) \
+        .exploration(
+            exploration_config={
+                "type": StochasticSampling,
+                "random_timesteps": 10000
+            }) \
+        .reporting(
+            min_time_s_per_iteration=0,
+            min_sample_timesteps_per_iteration=1000,  # 1000 updates per iteration
+            metrics_num_episodes_for_smoothing=5
+    ) \
+        .environment(env=config.env)\
+        .callbacks(CPUInitCallback)\
+        .to_dict()
+
+    num_cpus,num_gpus=config.resources()
+
+    ray.init(
+        num_cpus=num_cpus,
+        num_gpus=num_gpus,
+        local_mode=False,
+        include_dashboard=True
+    )
+
+    tuner = Tuner(
+        SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha,
+        param_space=sac_config,
+        tune_config=TuneConfig(
+            num_samples=config.num_tests
+        ),
+        run_config=RunConfig(
+            local_dir="~/ray_results",
+            # this will results in 1e6 updates
+            stop={"training_iteration": config.training_iteration},
+            checkpoint_config=CheckpointConfig(
+                num_to_keep=None,  # save all checkpoints
+                checkpoint_frequency=config.checkpoint_freq
+            )
+        )
+    )
+    
+    result_grid = tuner.fit()
+
+    exp_name=os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
+    with open(os.path.join(config.save_folder, exp_name)) as f:
+        pickle.dump(result_grid, f)
+
+    time.sleep(20)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_file", type=str, default="test/baseline.yaml")
+    args = parser.parse_args()
+
+    import os
+    print(os.getcwd())
+
+    yaml = YAML(typ='safe')
+    with open(args.config_file, 'r') as f:
+        config = yaml.load(f)
+    main(config)
