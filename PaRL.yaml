@@ -8,7 +8,7 @@ log_level: WARN
 # log_level: INFO
 
 # ============ env config ===========
-env: HalfCheetah-v3
+env: Ant-v3
  
 horizon: null
 soft_horizon: false
@@ -16,7 +16,7 @@ no_done_at_end: true
 
 # ============== target config==========
 num_workers: 1 # number of workers for target policy
-num_gpus: 1
+num_gpus: 0.1
 
 batch_mode: complete_episodes
 rollout_fragment_length: 1
@@ -33,8 +33,8 @@ pop_config:
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
-  # exploration_config:
-  #   type: StochasticSampling
+  exploration_config:
+    type: StochasticSampling
   #   random_timesteps: 0
 
 # ========== ea config ==============

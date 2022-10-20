@@ -1,4 +1,6 @@
 import time
+import os
+import pickle
 from ruamel.yaml import YAML
 import argparse
 import torch
@@ -11,6 +13,7 @@ from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
 from parl import PaRL, PaRLConfig
+from parl.env_config import mujoco_config
 
 
 class CPUInitCallback(DefaultCallbacks):
@@ -53,28 +56,45 @@ def main(config):
         )
     )
 
-    # default_config = PaRLConfig().callbacks(CPUInitCallback).to_dict()
-    default_config = PaRLConfig().python_environment(
-        extra_python_environs_for_driver={"OMP_NUM_THREADS": str(8)},
-        extra_python_environs_for_worker={"OMP_NUM_THREADS": str(8)}
-    ).to_dict()
+    default_config = PaRLConfig()
+    # default_config = default_config.callbacks(CPUInitCallback)
+    # default_config = default_config.python_environment(
+    #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(8)},
+    #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(8)}
+    # )
+
+
+    # mujoco_env_setting
+    env: str = config["env"]
+    tmp=env.split("-")[0]
+    env_config = mujoco_config.get(
+        env.split("-")[0], {}).get("Parameterizable-v3", {})
+    default_config.environment(env=env, env_config=env_config)
+
+    default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
+    
 
-    trainer_resources=PaRL.default_resource_request(merged_config).required_resources
-
+    trainer_resources = PaRL.default_resource_request(
+        merged_config).required_resources
 
     ray.init(
-        num_cpus=int(trainer_resources["CPU"]*num_samples), 
+        num_cpus=int(trainer_resources["CPU"]*num_samples),
         num_gpus=1,
         local_mode=False,
         include_dashboard=True
     )
-    result_grid = Tuner(
+    tuner = Tuner(
         PaRL,
         param_space=merged_config,
         tune_config=tune_config,
         run_config=run_config
-    ).fit()
+    )
+
+    result_grid = tuner.fit()
+    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
+    with open(os.path.join(config.save_folder, exp_name)) as f:
+        pickle.dump(result_grid, f)
 
     time.sleep(20)
 

@@ -55,6 +55,8 @@ def calculate_rr_weights(config: AlgorithmConfigDict):
 
 
 class SAC_Parallel(SAC):
+    _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
+        ["extra_python_environs_for_driver"]
     def training_step(self) -> ResultDict:
         """DQN training iteration function.
 
