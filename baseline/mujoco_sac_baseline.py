@@ -10,6 +10,7 @@ from ray.air import RunConfig, CheckpointConfig
 from ray.rllib.algorithms.sac import SACConfig
 from parl.sac import SAC_Parallel
 from parl.policy import SACPolicy, SACPolicy_FixedAlpha
+from parl.env_config import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
@@ -133,7 +134,12 @@ def main(_config):
         min_sample_timesteps_per_iteration=1000,  # 1000 updates per iteration
         metrics_num_episodes_for_smoothing=5
     )
-    sac_config = sac_config.environment(env=config.env)
+
+    sac_config = sac_config.environment(
+        env=config.env,
+        env_config=mujoco_config.get(
+            config.env.split("-")[0], {}).get("Parameterizable-v3", {})
+    )
     sac_config = sac_config.callbacks(CPUInitCallback)
     sac_config = sac_config.to_dict()
 

@@ -66,7 +66,6 @@ def main(config):
 
     # mujoco_env_setting
     env: str = config["env"]
-    tmp=env.split("-")[0]
     env_config = mujoco_config.get(
         env.split("-")[0], {}).get("Parameterizable-v3", {})
     default_config.environment(env=env, env_config=env_config)
