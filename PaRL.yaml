@@ -33,6 +33,9 @@ pop_config:
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
+  # exploration_config:
+  #   type: StochasticSampling
+  #   random_timesteps: 0
 
 # ========== ea config ==============
 ea_config:
@@ -94,7 +97,7 @@ compress_observations: false # also effect rollout transmission
 # ============= checkpoint & stopper config ===============
 tuner_config:
   num_samples: 1
-  checkpoint_freq: 50 # 0: disable
+  checkpoint_freq: 1 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 3000
+    training_iteration: 100

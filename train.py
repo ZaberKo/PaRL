@@ -17,7 +17,7 @@ class CPUInitCallback(DefaultCallbacks):
     def __init__(self):
         super().__init__()
         self.num_cpus_for_local_worker = 8
-        self.num_cpus_for_rollout_worker = 1
+        self.num_cpus_for_rollout_worker = 8
 
     def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
         # ============ driver worker multi-thread ==========
@@ -53,7 +53,11 @@ def main(config):
         )
     )
 
-    default_config = PaRLConfig().callbacks(CPUInitCallback).to_dict()
+    # default_config = PaRLConfig().callbacks(CPUInitCallback).to_dict()
+    default_config = PaRLConfig().python_environment(
+        extra_python_environs_for_driver={"OMP_NUM_THREADS": str(8)},
+        extra_python_environs_for_worker={"OMP_NUM_THREADS": str(8)}
+    ).to_dict()
     merged_config = merge_dicts(default_config, config)
 
     trainer_resources=PaRL.default_resource_request(merged_config).required_resources

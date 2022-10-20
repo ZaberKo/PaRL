@@ -28,6 +28,7 @@ class NeuroEvolution:
         self.target_weights = None
 
     def evolve(self, fitnesses):
+        self.fitnesses=fitnesses
         with self.evolve_timer:
             self._evolve(fitnesses)
 
@@ -36,10 +37,9 @@ class NeuroEvolution:
 
     def get_target_weights(self):
         with self.load_target_weights_timer:
-            target_weights = self.get_evolution_weights(self.target_worker)
-        self.target_weights = target_weights
+            self.target_weights = self.get_evolution_weights(self.target_worker)
 
-        return target_weights
+        return self.target_weights
 
     def sync_pop_weights(self):
         with self.sync_pop_weights_timer:

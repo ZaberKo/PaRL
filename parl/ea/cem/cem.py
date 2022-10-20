@@ -19,7 +19,7 @@ class CEM(NeuroEvolution):
         self.noise_end = config["noise_end"]
 
         # initialize pop
-        target_weights = self.get_evolution_weights(self.target_worker)
+        target_weights = self.get_target_weights()
         self.params_shape = {}
         self.params_size = {}
 
@@ -40,6 +40,8 @@ class CEM(NeuroEvolution):
 
         self.generate_pop()
         self.sync_pop_weights()
+
+        self.target_weights_flat = None
 
     def generate_pop(self):
         for i in range(self.pop_size):
@@ -83,11 +85,12 @@ class CEM(NeuroEvolution):
         orders = fitnesses.argsort()
         elite_ids = orders[:self.num_elites]
 
-        target_weights = self.get_evolution_weights()
-        target_weights_flat = self.flatten_weights(target_weights)
+        target_weights = self.get_target_weights()
+        # record target_weights_flat to calc the distance between pop mean
+        self.target_weights_flat = self.flatten_weights(target_weights)
 
         # update mean
-        mean = self.ws[0] * target_weights_flat + np.dot(
+        mean = self.ws[0] * self.target_weights_flat + np.dot(
             self.ws[1:], self.pop_flat[elite_ids])
 
         # update variance
@@ -113,7 +116,7 @@ class CEM(NeuroEvolution):
             "pop_var_mean": np.mean(self.variance),
             "pop_var_max": np.max(self.variance),
             "pop_var_min": np.min(self.variance),
-            "target_pop_diff_norm": np.linalg.norm(self.target_weights-self.mean,ord=2)
+            "target_pop_l2_distance": np.linalg.norm(self.target_weights_flat-self.mean, ord=2)
         })
 
         return data

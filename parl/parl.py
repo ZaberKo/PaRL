@@ -139,7 +139,7 @@ class PaRLConfig(SACConfig):
         self.metrics_num_episodes_for_smoothing = 5
         self.min_time_s_per_iteration = 0
         self.min_sample_timesteps_per_iteration = 0
-        self.min_train_timesteps_per_iteration = 500
+        self.min_train_timesteps_per_iteration = 256*1000
 
         # default_resources
         self.num_cpus_per_worker = 1
@@ -169,7 +169,7 @@ def make_learner_thread(local_worker, config):
 
 class PaRL(SAC):
     _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
-        ["pop_config", "ea_config"]
+        ["pop_config", "ea_config", "extra_python_environs_for_driver"]
     _override_all_subkeys_if_type_changes = SAC._override_all_subkeys_if_type_changes + \
         ["pop_config", "ea_config"]
 
@@ -246,7 +246,8 @@ class PaRL(SAC):
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        ts = 0
+
+        ts = 0 # total sample steps in the iteration
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
@@ -262,8 +263,9 @@ class PaRL(SAC):
 
         # step 3: sample batches from replay buffer and place them on learner queue
         # num_train_batches = round(ts/train_batch_size)
-        num_train_batches = 1000
-        for _ in range(num_train_batches):
+        # num_train_batches = 1000
+        num_train_batches = ts
+        for _ in trange(num_train_batches):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(train_batch_size)
 
