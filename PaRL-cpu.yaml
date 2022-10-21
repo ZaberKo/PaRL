@@ -8,11 +8,10 @@ log_level: WARN
 # log_level: INFO
 
 # ============ env config ===========
-env: HalfCheetah-v3
+env: Ant-v3
  
 horizon: null
 soft_horizon: false
-no_done_at_end: true
 
 # ============== target config==========
 num_workers: 1 # number of workers for target policy
@@ -33,6 +32,9 @@ pop_config:
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
+  exploration_config:
+    type: StochasticSampling
+  #   random_timesteps: 0
 
 # ========== ea config ==============
 ea_config:
@@ -50,7 +52,6 @@ evaluation_duration_unit: episodes
 evaluation_config:
   explore: false
   num_envs_per_worker: 1
-  no_done_at_end: false
   # batch_mode: complete_episodes
   # rollout_fragment_length: 1
   # num_gpus: 0.1
@@ -94,7 +95,7 @@ compress_observations: false # also effect rollout transmission
 # ============= checkpoint & stopper config ===============
 tuner_config:
   num_samples: 1
-  checkpoint_freq: 50 # 0: disable
+  checkpoint_freq: 1 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 3000
+    training_iteration: 100

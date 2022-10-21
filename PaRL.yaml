@@ -12,7 +12,6 @@ env: Ant-v3
  
 horizon: null
 soft_horizon: false
-no_done_at_end: true
 
 # ============== target config==========
 num_workers: 1 # number of workers for target policy
@@ -53,7 +52,6 @@ evaluation_duration_unit: episodes
 evaluation_config:
   explore: false
   num_envs_per_worker: 1
-  no_done_at_end: false
   # batch_mode: complete_episodes
   # rollout_fragment_length: 1
   # num_gpus: 0.1
