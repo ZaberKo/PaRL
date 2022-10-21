@@ -140,11 +140,11 @@ def main(_config):
         env_config=mujoco_config.get(
             config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
-    # sac_config = sac_config.callbacks(CPUInitCallback)
-    sac_config = sac_config.python_environment(
-        extra_python_environs_for_driver={"OMP_NUM_THREADS": str(config.num_cpus_for_local_worker)},
-        extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
-    )
+    sac_config = sac_config.callbacks(CPUInitCallback)
+    # sac_config = sac_config.python_environment(
+    #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(config.num_cpus_for_local_worker)},
+    #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
+    # )
     sac_config = sac_config.to_dict()
 
     num_cpus, num_gpus = config.resources()
