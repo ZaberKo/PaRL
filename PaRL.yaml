@@ -8,7 +8,7 @@ log_level: WARN
 # log_level: INFO
 
 # ============ env config ===========
-env: Ant-v3
+env: HalfCheetah-v3
  
 horizon: null
 soft_horizon: false
