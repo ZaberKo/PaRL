@@ -1,4 +1,4 @@
-env: "Hopper-v3"
+env: "Swimmer-v3"
 
 num_rollout_workers: 0
 num_eval_workers: 16
