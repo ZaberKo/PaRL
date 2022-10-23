@@ -56,6 +56,8 @@ class Config:
     checkpoint_freq: int = 10
     evaluation_interval: int = 10
 
+    random_timesteps:int = 0
+
     save_folder: str = "results"
 
     def resources(self):
@@ -126,7 +128,7 @@ def main(_config):
     sac_config = sac_config.exploration(
         exploration_config={
             "type": StochasticSampling,
-            "random_timesteps": 10000
+            "random_timesteps": config.random_timesteps
         }
     )
     sac_config = sac_config.reporting(

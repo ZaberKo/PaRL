@@ -8,7 +8,7 @@ log_level: WARN
 # log_level: INFO
 
 # ============ env config ===========
-env: Ant-v3
+env: HalfCheetah-v3
  
 horizon: null
 soft_horizon: false
@@ -98,4 +98,4 @@ tuner_config:
   checkpoint_freq: 1 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 100
+    training_iteration: 300
