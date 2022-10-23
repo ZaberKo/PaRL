@@ -18,13 +18,13 @@ from ray.rllib.utils.typing import TensorType, List, Union, Tuple, ModelConfigDi
 
 torch, nn = try_import_torch()
 
-# numerically stable version of TorchSquashedGaussian
+
 
 SMALL_NUMBER=1e-9
 MIN_LOG_NN_OUTPUT = -20
 MAX_LOG_NN_OUTPUT = 2
 
-
+# numerically stable version of TorchSquashedGaussian
 class SquashedGaussian(TorchSquashedGaussian):
     def __init__(
         self,
@@ -53,7 +53,7 @@ class SquashedGaussian(TorchSquashedGaussian):
         self.high = high
         self.mean = mean
         self.std = std
-        
+
     @override(TorchSquashedGaussian)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)

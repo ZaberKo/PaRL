@@ -22,7 +22,7 @@ from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from .sac_model import SACTorchModel
 from .sac_policy_mixin import SACEvolveMixin, SACMod
-from .action_dist import SquashedGaussian, SquashedGaussian2
+from .action_dist import SquashedGaussian
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
 import gym
