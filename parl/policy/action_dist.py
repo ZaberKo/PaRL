@@ -26,6 +26,34 @@ MAX_LOG_NN_OUTPUT = 2
 
 
 class SquashedGaussian(TorchSquashedGaussian):
+    def __init__(
+        self,
+        inputs: List[TensorType],
+        model: TorchModelV2,
+        low: float = -1.0,
+        high: float = 1.0,
+    ):
+        """Parameterizes the distribution via `inputs`.
+
+        Args:
+            low: The lowest possible sampling value
+                (excluding this value).
+            high: The highest possible sampling value
+                (excluding this value).
+        """
+        super().__init__(inputs, model)
+        # Split inputs into mean and log(std).
+        mean, log_std = torch.chunk(self.inputs, 2, dim=-1)
+        # Clip `scale` values (coming from NN) to reasonable values.
+        log_std = torch.clamp(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT)
+        std = torch.exp(log_std)
+        self.dist = torch.distributions.normal.Normal(mean, std)
+        assert np.all(np.less(low, high))
+        self.low = low
+        self.high = high
+        self.mean = mean
+        self.std = std
+        
     @override(TorchSquashedGaussian)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)

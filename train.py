@@ -63,7 +63,6 @@ def main(config):
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(8)}
     # )
 
-
     # mujoco_env_setting
     env: str = config["env"]
     env_config = mujoco_config.get(
@@ -72,7 +71,6 @@ def main(config):
 
     default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
-    
 
     trainer_resources = PaRL.default_resource_request(
         merged_config).required_resources
@@ -92,7 +90,7 @@ def main(config):
 
     result_grid = tuner.fit()
     exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join("results", exp_name)) as f:
+    with open(os.path.join("results", exp_name), "wb") as f:
         pickle.dump(result_grid, f)
 
     time.sleep(20)

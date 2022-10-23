@@ -178,7 +178,7 @@ def main(_config):
     result_grid = tuner.fit()
 
     exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join(config.save_folder, exp_name)) as f:
+    with open(os.path.join(config.save_folder, exp_name), "wb") as f:
         pickle.dump(result_grid, f)
 
     time.sleep(20)

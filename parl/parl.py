@@ -282,7 +282,8 @@ class PaRL(SAC):
 
         # step 4: apply NE
         fitnesses = self._calc_fitness(pop_sample_batches)
-        self.evolver.evolve(fitnesses)
+        target_fitness = np.mean([episode[SampleBatch.REWARDS].sum() for episode in flatten_batches(target_sample_batches)])
+        self.evolver.evolve(fitnesses, target_fitness=target_fitness)
         with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
             # set pop workers with new generated indv weights
             self.evolver.sync_pop_weights()
