@@ -27,12 +27,12 @@ class NeuroEvolution:
         self.fitnesses = None
         self.target_weights = None
 
-    def evolve(self, fitnesses):
+    def evolve(self, fitnesses, **kwargs):
         self.fitnesses=fitnesses
         with self.evolve_timer:
-            self._evolve(fitnesses)
+            self._evolve(fitnesses, **kwargs)
 
-    def _evolve(self, fitnesses):
+    def _evolve(self, fitnesses, **kwargs):
         raise NotImplementedError
 
     def get_target_weights(self):

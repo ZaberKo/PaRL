@@ -182,3 +182,5 @@ cython_debug/
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 render/*
 !render/.gitkeep
+results/*
+!results/.gitkeep
