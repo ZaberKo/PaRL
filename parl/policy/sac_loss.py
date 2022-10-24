@@ -405,7 +405,7 @@ def actor_critic_loss_fix(
 
     actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
 
-    alpha_loss = calc_alpha_loss()
+    alpha_loss = calc_alpha_loss(policy, model, dist_class, train_batch)
 
     # Return all loss terms corresponding to our optimizers.
     return tuple([actor_loss] + critic_loss + [alpha_loss])
