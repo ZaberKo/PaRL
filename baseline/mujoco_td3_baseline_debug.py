@@ -146,7 +146,7 @@ def main(_config):
         num_cpus=num_cpus,
         num_gpus=num_gpus,
         local_mode=False,
-        include_dashboard=True
+        include_dashboard=False
     )
 
     trainer=TD3Mod(config=td3_config)

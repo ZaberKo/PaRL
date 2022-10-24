@@ -21,7 +21,8 @@ from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from .sac_model import SACTorchModel
-from .sac_policy_mixin import SACEvolveMixin, SACMod
+from .sac_policy_mixin import SACEvolveMixin, SACLearning
+from .policy_mixin import TorchPolicyMod
 from .action_dist import SquashedGaussian
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
@@ -280,7 +281,7 @@ def record_grads(
     elif policy.critic_optims[1] == optimizer:
         return {"twin_critic_gnorm": grad_gnorm}
     elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
-        return {"alpha_optim_gnorm": grad_gnorm}
+        return {"alpha_gnorm": grad_gnorm}
     else:
         return {}
 
@@ -317,7 +318,7 @@ SACPolicy = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )
@@ -337,7 +338,25 @@ SACPolicy_FixedAlpha = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    action_distribution_fn=action_distribution_fn_fix,
+    apply_gradients_fn=apply_gradients
+)
+
+
+SACPolicyTest = build_policy_class(
+    name="SACTorchPolicy",
+    framework="torch",
+    loss_fn=actor_critic_loss_fix,
+    get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
+    stats_fn=stats,
+    postprocess_fn=postprocess_trajectory,
+    optimizer_fn=optimizer_fn,
+    validate_spaces=validate_spaces,
+    before_loss_init=setup_late_mixins,
+    make_model_and_action_dist=build_sac_model_and_action_dist_fix,
+    extra_learn_fetches_fn=concat_multi_gpu_td_errors,
+    mixins=[SACLearning, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )

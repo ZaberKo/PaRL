@@ -9,7 +9,8 @@ from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 from ray.rllib.algorithms.sac import SACConfig
 from parl.sac import SAC_Parallel
-from parl.policy import SACPolicy, SACPolicy_FixedAlpha
+
+from parl.policy.sac_policy import SACPolicyTest
 from parl.env_config import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
@@ -21,16 +22,13 @@ from dataclasses import dataclass
 from typing import Union
 
 
-class SAC_FixAlpha(SAC_Parallel):
+class SACTest(SAC_Parallel):
     def get_default_policy_class(
             self, config):
-        return SACPolicy_FixedAlpha
+        return SACPolicyTest
 
 
-class SAC_TuneAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy
+
 
 
 @dataclass
@@ -166,7 +164,7 @@ def main(_config):
     )
 
     tuner = Tuner(
-        SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha,
+        SACTest,
         param_space=sac_config,
         tune_config=TuneConfig(
             num_samples=config.num_tests

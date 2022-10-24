@@ -28,7 +28,7 @@ class TD3Mod(TD3):
     def get_default_policy_class(self, config):
         return TD3Policy
 
-    def training_step_original(self) -> ResultDict:
+    def training_step(self) -> ResultDict:
         """Simple Q training iteration function.
 
         Simple Q consists of the following steps:

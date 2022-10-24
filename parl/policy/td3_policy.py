@@ -107,7 +107,6 @@ class TD3Policy(DDPGTorchPolicy):
         # Note: self.loss() is called in it.
         super().__init__(observation_space, action_space, config)
 
-
     @override(TorchPolicyV2)
     def extra_grad_process(
         self, optimizer: torch.optim.Optimizer, loss: TensorType
@@ -171,15 +170,15 @@ class TD3Policy(DDPGTorchPolicy):
                 max=target_noise_clip,
             )
 
-            if not hasattr(self,"action_space_low_tensor"):
+            if not hasattr(self, "action_space_low_tensor"):
                 self.action_space_low_tensor = torch.tensor(
                     self.action_space.low.copy(),
                     dtype=torch.float32,
                     device=self.device
                 )
-            if not hasattr(self,"action_space_high_tensor"):
+            if not hasattr(self, "action_space_high_tensor"):
                 self.action_space_high_tensor = torch.tensor(
-                    self.action_space.high,
+                    self.action_space.high.copy(),
                     dtype=torch.float32,
                     device=self.device
                 )
@@ -223,29 +222,29 @@ class TD3Policy(DDPGTorchPolicy):
         ).detach()
 
         # Compute the error (potentially clipped).
+        use_prio = False
+        reduction = "none" if use_prio else "mean"
         if twin_q:
             td_error = q_t_selected - q_t_selected_target
             if use_huber:
                 errors = F.huber_loss(
                     input=q_t_selected,
                     target=q_t_selected_target,
-                    delta=huber_threshold, reduction='none'
+                    delta=huber_threshold, reduction=reduction
                 ) + F.huber_loss(
                     input=twin_q_t_selected,
                     target=q_t_selected_target,
-                    delta=huber_threshold, reduction='none'
+                    delta=huber_threshold, reduction=reduction
                 )
             else:
-                errors = 0.5 * (
-                    F.mse_loss(
-                        input=q_t_selected,
-                        target=q_t_selected_target,
-                        reduction='none'
-                    ) + F.mse_loss(
-                        input=twin_q_t_selected,
-                        target=q_t_selected_target,
-                        reduction='none'
-                    )
+                errors = F.mse_loss(
+                    input=q_t_selected,
+                    target=q_t_selected_target,
+                    reduction=reduction
+                ) + F.mse_loss(
+                    input=twin_q_t_selected,
+                    target=q_t_selected_target,
+                    reduction=reduction
                 )
 
         else:
@@ -254,13 +253,13 @@ class TD3Policy(DDPGTorchPolicy):
                 errors = F.huber_loss(
                     input=q_t_selected,
                     target=q_t_selected_target,
-                    delta=huber_threshold, reduction='none'
+                    delta=huber_threshold, reduction=reduction
                 )
             else:
                 errors = F.mse_loss(
                     input=q_t_selected,
                     target=q_t_selected_target,
-                    reduction='none'
+                    reduction=reduction
                 )
 
         critic_loss = torch.mean(train_batch[PRIO_WEIGHTS] * errors)

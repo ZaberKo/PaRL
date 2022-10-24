@@ -30,10 +30,10 @@ from ray.rllib.utils.metrics import (
     SYNCH_WORKER_WEIGHTS_TIMER,
     TARGET_NET_UPDATE_TIMER,
 )
-from .rollout import synchronous_parallel_sample, flatten_batches
-from .learner_thread import MultiGPULearnerThread
-from .ea import NeuroEvolution, CEM
-from .policy import SACPolicy
+from parl.rollout import synchronous_parallel_sample, flatten_batches
+from parl.learner_thread import MultiGPULearnerThread
+from parl.ea import NeuroEvolution, CEM
+from parl.policy import SACPolicy
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
