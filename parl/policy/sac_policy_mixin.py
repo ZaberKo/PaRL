@@ -17,6 +17,7 @@ from ray.rllib.utils.typing import (
 )
 from ray.rllib.utils.metrics import NUM_AGENT_STEPS_TRAINED
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
+from typing import Dict
 
 class SACEvolveMixin:
     """
