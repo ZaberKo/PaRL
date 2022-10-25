@@ -7,18 +7,30 @@ import torch
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
-from ray.rllib.algorithms.td3 import TD3Config
-from parl.td3 import TD3Mod
+from ray.rllib.algorithms.sac import SACConfig
+from parl.sac import SAC_Parallel
+from parl.policy import SACPolicy, SACPolicy_FixedAlpha
 from parl.env_config import mujoco_config
 
-
+from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
 import argparse
 from dataclasses import dataclass
+from typing import Union
 
 
+class SAC_FixAlpha(SAC_Parallel):
+    def get_default_policy_class(
+            self, config):
+        return SACPolicy_FixedAlpha
+
+
+class SAC_TuneAlpha(SAC_Parallel):
+    def get_default_policy_class(
+            self, config):
+        return SACPolicy
 
 
 @dataclass
@@ -28,17 +40,23 @@ class Config:
     num_rollout_workers: int = 0
     num_eval_workers: int = 16
 
-    rollout_fragment_length: int = 1
+    rollout_fragment_length: int = 50
+    enable_multiple_updates: bool = True
+    rollout_vs_train: Union[int, float] = 1
 
     num_cpus_for_local_worker: int = 1
     num_cpus_for_rollout_worker: int = 1
 
     use_gpu: bool = True
+    autotune_alpha: bool = False
+    initial_alpha: float = 1.0
 
     num_tests: int = 3
     training_iteration: int = 3000
     checkpoint_freq: int = 10
     evaluation_interval: int = 10
+
+    random_timesteps: int = 0
 
     save_folder: str = "results"
 
@@ -70,16 +88,19 @@ def main(_config):
                         for w in algorithm.workers.remote_workers()]
             ray.wait(pendings, num_returns=len(pendings))
 
-    td3_config = TD3Config().framework('torch')
-    td3_config = td3_config.rollouts(
+    sac_config = SACConfig().framework('torch')
+    sac_config = sac_config.rollouts(
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
+        # no_done_at_end=True,
         horizon=1000,
+        soft_horizon=False,
     )
-    td3_config = td3_config.training(
-        policy_delay=2,
-        train_batch_size=100,
+    sac_config = sac_config.training(
+        initial_alpha=config.initial_alpha,
+        train_batch_size=256,
+        training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
             "_enable_replay_buffer_api": True,
             "type": "MultiAgentReplayBuffer",
@@ -88,57 +109,52 @@ def main(_config):
             "learning_starts": 10000,
         }
     )
-    td3_config = td3_config.resources(
+    sac_config = sac_config.resources(
         num_gpus=1/config.num_tests if config.use_gpu else 0,
         num_cpus_for_local_worker=config.num_cpus_for_local_worker,
         num_cpus_per_worker=config.num_cpus_for_rollout_worker
     )
-    td3_config = td3_config.evaluation(
+    sac_config = sac_config.evaluation(
         evaluation_interval=config.evaluation_interval,
         evaluation_num_workers=config.num_eval_workers,
         evaluation_duration=10,
         evaluation_config={
+            "no_done_at_end": False,
             "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
     )
-    td3_config = td3_config.exploration(
+    sac_config = sac_config.exploration(
         exploration_config={
-            # TD3 uses simple Gaussian noise on top of deterministic NN-output
-            # actions (after a possible pure random phase of n timesteps).
-            "type": "GaussianNoise",
-            # For how many timesteps should we return completely random
-            # actions, before we start adding (scaled) noise?
-            "random_timesteps": 10000,
-            # Gaussian stddev of action noise for exploration.
-            "stddev": 0.1,
-            # Scaling settings by which the Gaussian noise is scaled before
-            # being added to the actions. NOTE: The scale timesteps start only
-            # after(!) any random steps have been finished.
-            # By default, do not anneal over time (fixed 1.0).
-            "initial_scale": 1.0,
-            "final_scale": 1.0,
-            "scale_timesteps": 1,
+            "type": StochasticSampling,
+            "random_timesteps": config.random_timesteps
         }
     )
-    td3_config = td3_config.reporting(
+    sac_config = sac_config.reporting(
         min_time_s_per_iteration=0,
         min_sample_timesteps_per_iteration=1000,  # 1000 updates per iteration
         metrics_num_episodes_for_smoothing=5
     )
 
-    td3_config = td3_config.environment(
+    sac_config = sac_config.environment(
         env=config.env,
         env_config=mujoco_config.get(
             config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
-    td3_config = td3_config.callbacks(CPUInitCallback)
+    sac_config = sac_config.callbacks(CPUInitCallback)
     # sac_config = sac_config.python_environment(
     #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(config.num_cpus_for_local_worker)},
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
     # )
-    td3_config = td3_config.to_dict()
+    sac_config = sac_config.to_dict()
+
+    # set the same lr as tianshou
+    sac_config["optimization"] == {
+        "actor_learning_rate": 1e-4,
+        "critic_learning_rate": 1e-4,
+        "entropy_learning_rate": 3e-4,
+    }
 
     num_cpus, num_gpus = config.resources()
 
@@ -149,28 +165,20 @@ def main(_config):
         include_dashboard=True
     )
 
-    tuner = Tuner(
-        TD3Mod,
-        param_space=td3_config,
-        tune_config=TuneConfig(
-            num_samples=config.num_tests
-        ),
-        run_config=RunConfig(
-            local_dir="~/ray_results",
-            # this will results in 1e6 updates
-            stop={"training_iteration": config.training_iteration},
-            checkpoint_config=CheckpointConfig(
-                num_to_keep=None,  # save all checkpoints
-                checkpoint_frequency=config.checkpoint_freq
-            )
-        )
-    )
 
-    result_grid = tuner.fit()
+    SAC=SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha
+    trainer=SAC(config=sac_config)
 
-    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join(config.save_folder, exp_name), "wb") as f:
-        pickle.dump(result_grid, f)
+    from tqdm import trange
+    from ray.rllib.utils.debug import summarize
+    for i in trange(10000):
+        res = trainer.train()
+        print(f"======= iter {i+1} ===========")
+        del res["config"]
+        del res["hist_stats"]
+        print(summarize(res))
+        print("+"*20)
+
 
     time.sleep(20)
 
@@ -178,7 +186,7 @@ def main(_config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/td3_baseline.yaml")
+                        default="baseline/sac_baseline_cpu_hopper.yaml")
     args = parser.parse_args()
 
     import os

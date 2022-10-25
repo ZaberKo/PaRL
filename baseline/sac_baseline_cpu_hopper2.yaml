@@ -1,13 +1,13 @@
 env: "Hopper-v3"
 
 num_rollout_workers: 0
-num_eval_workers: 0
+num_eval_workers: 1
 
 rollout_fragment_length: 1
 enable_multiple_updates: false
 rollout_vs_train: 1
 
-num_cpus_for_local_worker: 16
+num_cpus_for_local_worker: 10
 num_cpus_for_rollout_worker: 1
 
 use_gpu: false

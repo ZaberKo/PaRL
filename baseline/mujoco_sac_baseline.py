@@ -117,7 +117,7 @@ def main(_config):
     sac_config = sac_config.evaluation(
         evaluation_interval=config.evaluation_interval,
         evaluation_num_workers=config.num_eval_workers,
-        evaluation_duration=config.num_eval_workers*1,
+        evaluation_duration=10,
         evaluation_config={
             "no_done_at_end": False,
             "horizon": None,

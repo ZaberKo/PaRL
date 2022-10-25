@@ -1,9 +1,9 @@
 env: "Ant-v3"
 
 num_rollout_workers: 0
-num_eval_workers: 16
+num_eval_workers: 1
 
-rollout_fragment_length: 1
+rollout_fragment_length: 50
 enable_multiple_updates: true
 rollout_vs_train: 1
 
