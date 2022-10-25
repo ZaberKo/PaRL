@@ -79,7 +79,7 @@ class CEM(NeuroEvolution):
 
         return weights
 
-    @override(NeuroEvolution)
+    # @override(NeuroEvolution)
     def _evolve1(self, fitnesses, target_fitness):
 
         fitnesses = np.asarray(fitnesses)

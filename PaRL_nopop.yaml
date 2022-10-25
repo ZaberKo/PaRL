@@ -26,7 +26,7 @@ exploration_config:
   # random_timesteps: 10000
 
 # ============= pop actors config ==============
-pop_size: 10 # number of pop_workers
+pop_size: 0 # number of pop_workers
 pop_config:
   explore: true
   num_envs_per_worker: 1
@@ -45,9 +45,9 @@ ea_config:
   noise_end: !!float 1e-5
 
 # ========= evaluation worker config ==========
-evaluation_num_workers: 16
+evaluation_num_workers: 10
 evaluation_interval: 1
-evaluation_duration: 16
+evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
   explore: false
