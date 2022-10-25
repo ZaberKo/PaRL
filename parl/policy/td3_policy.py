@@ -135,6 +135,20 @@ class TD3Policy(DDPGTorchPolicy):
         huber_threshold = self.config["huber_threshold"]
         l2_reg = self.config["l2_reg"]
 
+        # clip the action to avoid out of bound.
+        if not hasattr(self, "action_space_low_tensor"):
+            self.action_space_low_tensor = torch.tensor(
+                self.action_space.low.copy(),
+                dtype=torch.float32,
+                device=self.device
+            )
+        if not hasattr(self, "action_space_high_tensor"):
+            self.action_space_high_tensor = torch.tensor(
+                self.action_space.high.copy(),
+                dtype=torch.float32,
+                device=self.device
+            )
+
         input_dict = SampleBatch(
             obs=train_batch[SampleBatch.CUR_OBS], _is_training=True
         )
@@ -170,19 +184,6 @@ class TD3Policy(DDPGTorchPolicy):
                 max=target_noise_clip,
             )
 
-            if not hasattr(self, "action_space_low_tensor"):
-                self.action_space_low_tensor = torch.tensor(
-                    self.action_space.low.copy(),
-                    dtype=torch.float32,
-                    device=self.device
-                )
-            if not hasattr(self, "action_space_high_tensor"):
-                self.action_space_high_tensor = torch.tensor(
-                    self.action_space.high.copy(),
-                    dtype=torch.float32,
-                    device=self.device
-                )
-
             policy_tp1_smoothed = torch.clamp(
                 policy_tp1 + clipped_normal_sample,
                 min=self.action_space_low_tensor,
@@ -195,31 +196,32 @@ class TD3Policy(DDPGTorchPolicy):
         # Q-net(s) evaluation.
         # Q-values for given actions & observations in given current
         q_t = model.get_q_values(model_out_t, train_batch[SampleBatch.ACTIONS])
+        q_t_selected = torch.squeeze(q_t, dim=-1)  # [B,1]->[B]
 
-        # Target q-net(s) evaluation.
-        q_tp1 = target_model.get_q_values(
-            target_model_out_tp1, policy_tp1_smoothed)
-        q_t_selected = torch.squeeze(q_t, dim=-1)
+        with torch.no_grad():
+            # Target q-net(s) evaluation.
+            q_tp1 = target_model.get_q_values(
+                target_model_out_tp1, policy_tp1_smoothed)
 
-        if twin_q:
-            twin_q_t = model.get_twin_q_values(
-                model_out_t, train_batch[SampleBatch.ACTIONS]
-            )
-            twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
-            twin_q_tp1 = target_model.get_twin_q_values(
-                target_model_out_tp1, policy_tp1_smoothed
-            )
-            q_tp1 = torch.min(q_tp1, twin_q_tp1)
+            if twin_q:
+                twin_q_t = model.get_twin_q_values(
+                    model_out_t, train_batch[SampleBatch.ACTIONS]
+                )
+                twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
+                twin_q_tp1 = target_model.get_twin_q_values(
+                    target_model_out_tp1, policy_tp1_smoothed
+                )
+                q_tp1 = torch.min(q_tp1, twin_q_tp1)
 
-        q_tp1_best = torch.squeeze(q_tp1, dim=-1)
-        q_tp1_best_masked = (
-            1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+            q_tp1_best = torch.squeeze(q_tp1, dim=-1)
+            q_tp1_best_masked = (
+                1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
 
-        # Compute RHS of bellman equation.
-        q_t_selected_target = (
-            train_batch[SampleBatch.REWARDS] +
-            gamma ** n_step * q_tp1_best_masked
-        ).detach()
+            # Compute RHS of bellman equation.
+            q_t_selected_target = (
+                train_batch[SampleBatch.REWARDS] +
+                gamma ** n_step * q_tp1_best_masked
+            ).detach()  # [B]
 
         # Compute the error (potentially clipped).
         use_prio = False
@@ -261,8 +263,10 @@ class TD3Policy(DDPGTorchPolicy):
                     target=q_t_selected_target,
                     reduction=reduction
                 )
-
-        critic_loss = torch.mean(train_batch[PRIO_WEIGHTS] * errors)
+        if use_prio:
+            critic_loss = torch.mean(train_batch[PRIO_WEIGHTS] * errors)
+        else:
+            critic_loss = errors
 
         # Add l2-regularization if required.
         # if l2_reg is not None:

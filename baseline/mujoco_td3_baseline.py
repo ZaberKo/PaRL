@@ -19,8 +19,6 @@ import argparse
 from dataclasses import dataclass
 
 
-
-
 @dataclass
 class Config:
     env: str = "HalfCheetah-v3"
@@ -79,6 +77,9 @@ def main(_config):
     )
     td3_config = td3_config.training(
         policy_delay=2,
+        target_noise=0.2,
+        target_noise_clip=0.5,
+        smooth_target_policy=True,
         train_batch_size=100,
         replay_buffer_config={
             "_enable_replay_buffer_api": True,
