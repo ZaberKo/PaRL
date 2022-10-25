@@ -115,7 +115,7 @@ def main(_config):
     sac_config = sac_config.evaluation(
         evaluation_interval=config.evaluation_interval,
         evaluation_num_workers=config.num_eval_workers,
-        evaluation_duration=config.num_eval_workers*1,
+        evaluation_duration=10,
         evaluation_config={
             "no_done_at_end": False,
             "horizon": None,
@@ -192,7 +192,7 @@ def main(_config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/sac_baseline.yaml")
+                        default="baseline/sac_baseline_cpu_hopper.yaml")
     args = parser.parse_args()
 
     import os

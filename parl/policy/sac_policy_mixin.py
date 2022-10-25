@@ -83,7 +83,7 @@ class SACLearning:
 
         grad_info = {"allreduce_latency": 0.0}
         # calc gradient and updates
-        critic_losses = calc_critic_loss(self, self.model, self.dist_class)
+        critic_losses = calc_critic_loss(self, self.model, self.dist_class, postprocessed_batch)
         _name="critic_gnorm"
         for critic_loss, critic_optim in zip(critic_losses, self.critic_optims):
             critic_optim.zero_grad()
@@ -92,14 +92,14 @@ class SACLearning:
             critic_optim.step()
             _name="twin_critic_gnorm"
 
-        actor_loss = calc_actor_loss(self, self.model, self.dist_class)
+        actor_loss = calc_actor_loss(self, self.model, self.dist_class, postprocessed_batch)
         self.actor_optim.zero_grad()
         actor_loss.backward()
         grad_info["actor_gnorm"]=calc_grad_norm(self.actor_optim)
         self.actor_optim.step()
 
         if hasattr(self, "alpha_optim"):
-            alpha_loss = calc_alpha_loss(self, self.model, self.dist_class)
+            alpha_loss = calc_alpha_loss(self, self.model, self.dist_class, postprocessed_batch)
             self.alpha_optim.zero_grad()
             alpha_loss.backward()
             grad_info["alpha_gnorm"]=calc_grad_norm(self.alpha_optim)
