@@ -105,8 +105,11 @@ class SACLearning:
             grad_info["alpha_gnorm"]=calc_grad_norm(self.alpha_optim)
             self.alpha_optim.step()
 
-
-        grad_info.update(self.stats_fn(postprocessed_batch))
+        # for TorchPolicyV2
+        if hasattr(self, "stats_fn"):
+            grad_info.update(self.stats_fn(postprocessed_batch))
+        else:
+            grad_info.update(self.extra_grad_info(postprocessed_batch))
 
         fetches = self.extra_compute_grad_fetches()
         fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
