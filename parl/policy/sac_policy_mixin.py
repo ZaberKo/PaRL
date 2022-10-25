@@ -56,6 +56,8 @@ def calc_grad_norm(optimizer):
                 for p in params
             ]), p=2).cpu().numpy()
 
+    return grad_gnorm
+
 
 class SACLearning:
     """
