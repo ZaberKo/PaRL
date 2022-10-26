@@ -45,9 +45,9 @@ ea_config:
   noise_end: !!float 1e-5
 
 # ========= evaluation worker config ==========
-evaluation_num_workers: 16
+evaluation_num_workers: 10
 evaluation_interval: 1
-evaluation_duration: 16
+evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
   explore: false
