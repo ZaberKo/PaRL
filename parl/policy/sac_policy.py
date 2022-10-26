@@ -14,7 +14,7 @@ from ray.rllib.algorithms.sac.sac_tf_policy import (
     postprocess_trajectory,
     validate_spaces,
 )
-
+from ray.rllib.utils.torch_utils import apply_grad_clipping
 from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 
 
@@ -285,6 +285,40 @@ def record_grads(
     else:
         return {}
 
+def apply_and_record_grad_clipping(
+    policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
+) -> Dict[str, TensorType]:
+    grad_gnorm = 0
+    if policy.config["grad_clip"] is not None:
+        clip_value = policy.config["grad_clip"]
+    else:
+        clip_value = np.inf
+
+    for param_group in optimizer.param_groups:
+        # Make sure we only pass params with grad != None into torch
+        # clip_grad_norm_. Would fail otherwise.
+        params = list(filter(lambda p: p.grad is not None, param_group["params"]))
+        if params:
+            # PyTorch clips gradients inplace and returns the norm before clipping
+            # We therefore need to compute grad_gnorm further down (fixes #4965)
+            global_norm = nn.utils.clip_grad_norm_(params, clip_value)
+
+            if isinstance(global_norm, torch.Tensor):
+                global_norm = global_norm.cpu().numpy()
+
+            grad_gnorm += min(global_norm, clip_value)
+
+    if policy.actor_optim == optimizer:
+        return {"actor_gnorm": grad_gnorm}
+    elif policy.critic_optims[0] == optimizer:
+        return {"critic_gnorm": grad_gnorm}
+    elif policy.critic_optims[1] == optimizer:
+        return {"twin_critic_gnorm": grad_gnorm}
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
+        return {"alpha_gnorm": grad_gnorm}
+    else:
+        return {}
+
 
 def apply_gradients(policy, gradients) -> None:
     assert gradients == _directStepOptimizerSingleton
@@ -312,7 +346,7 @@ SACPolicy = build_policy_class(
     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
     stats_fn=stats,
     postprocess_fn=postprocess_trajectory,
-    extra_grad_process_fn=record_grads,
+    extra_grad_process_fn=apply_and_record_grad_clipping,
     optimizer_fn=optimizer_fn,
     validate_spaces=validate_spaces,
     before_loss_init=setup_late_mixins,
@@ -332,7 +366,7 @@ SACPolicy_FixedAlpha = build_policy_class(
     stats_fn=stats,
     postprocess_fn=postprocess_trajectory,
     # extra_grad_process_fn=apply_grad_clipping,
-    extra_grad_process_fn=record_grads,
+    extra_grad_process_fn=apply_and_record_grad_clipping,
     optimizer_fn=optimizer_fn_no_alpha,
     validate_spaces=validate_spaces,
     before_loss_init=setup_late_mixins,

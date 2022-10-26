@@ -14,3 +14,5 @@ num_tests: 4
 training_iteration: 3000
 checkpoint_freq: 10
 evaluation_interval: 2
+
+grad_clip: 10

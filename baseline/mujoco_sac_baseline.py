@@ -50,6 +50,7 @@ class Config:
     use_gpu: bool = True
     autotune_alpha: bool = False
     initial_alpha: float = 1.0
+    grad_clip: float = None
 
     num_tests: int = 3
     training_iteration: int = 3000
@@ -98,6 +99,7 @@ def main(_config):
         soft_horizon=False,
     )
     sac_config = sac_config.training(
+        grad_clip=config.grad_clip,
         initial_alpha=config.initial_alpha,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
@@ -194,13 +196,14 @@ def main(_config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/sac_baseline.yaml")
+                        default="baseline/td3_baseline.yaml")
+    parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
-
-    import os
-    print(os.getcwd())
 
     yaml = YAML(typ='safe')
     with open(args.config_file, 'r') as f:
         config = yaml.load(f)
+
+    if args.env:
+        config["env"]=args.env
     main(config)

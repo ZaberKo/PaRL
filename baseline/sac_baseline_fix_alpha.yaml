@@ -1,19 +1,19 @@
-env: "Ant-v3"
+env: "HalfCheetah-v3"
 
 num_rollout_workers: 0
-num_eval_workers: 1
+num_eval_workers: 16
 
 rollout_fragment_length: 50
 enable_multiple_updates: true
 rollout_vs_train: 1
 
-num_cpus_for_local_worker: 20
+num_cpus_for_local_worker: 4
 num_cpus_for_rollout_worker: 1
 
-use_gpu: false
+use_gpu: true
 
 
-num_tests: 4
+num_tests: 3
 training_iteration: 3000
 checkpoint_freq: 10
 evaluation_interval: 10
@@ -22,3 +22,5 @@ initial_alpha: 0.2
 autotune_alpha: false
 
 random_timesteps: 10000
+
+grad_clip: 10
