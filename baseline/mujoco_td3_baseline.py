@@ -180,12 +180,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
                         default="baseline/td3_baseline.yaml")
+    parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
-
-    import os
-    print(os.getcwd())
 
     yaml = YAML(typ='safe')
     with open(args.config_file, 'r') as f:
         config = yaml.load(f)
+
+    if args.env:
+        config["env"]=args.env
     main(config)

@@ -87,7 +87,7 @@ target_network_update_freq: 1 # unit: iteration
 replay_buffer_config:
   type: MultiAgentReplayBuffer
   capacity: !!int 1000000
-  learning_starts: 16000 # 16*1000
+  learning_starts: 10000 # 16*1000
   # num_replay_buffer_shards: 1
 
 compress_observations: false # also effect rollout transmission
@@ -98,4 +98,4 @@ tuner_config:
   checkpoint_freq: 1 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 100
+    training_iteration: 3000
