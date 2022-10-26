@@ -20,7 +20,7 @@ from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
-from .sac_model import SACTorchModel
+from parl.model.sac_model import SACTorchModel
 from .sac_policy_mixin import SACEvolveMixin, SACLearning
 from .policy_mixin import TorchPolicyMod
 from .action_dist import SquashedGaussian
@@ -107,7 +107,7 @@ def action_distribution_fn_fix(
     model_out, _ = model(input_dict, [], None)
     # Use the base output to get the policy outputs from the SAC model's
     # policy components.
-    action_dist_inputs, _ = model.get_action_model_outputs(model_out)
+    action_dist_inputs = model.get_action_model_outputs(model_out)
     # Get a distribution class to be used with the just calculated dist-inputs.
 
     # assert issubclass(policy.dist_class, SquashedGaussian)
@@ -131,10 +131,12 @@ def build_sac_model_and_action_dist_fix(
 
     default_model_cls = SACTorchModel
 
+    num_outputs = int(np.product(policy.observation_space.shape))
+
     model = ModelCatalog.get_model_v2(
         obs_space=obs_space,
         action_space=action_space,
-        num_outputs=None,
+        num_outputs=num_outputs,
         model_config=config["model"],
         framework=config["framework"],
         default_model=default_model_cls,
@@ -155,7 +157,7 @@ def build_sac_model_and_action_dist_fix(
     policy.target_model = ModelCatalog.get_model_v2(
         obs_space=obs_space,
         action_space=action_space,
-        num_outputs=None,
+        num_outputs=num_outputs,
         model_config=config["model"],
         framework=config["framework"],
         default_model=default_model_cls,

@@ -1,19 +1,10 @@
+import numpy as np
+import gym
 from ray.rllib.algorithms.ddpg.ddpg_torch_policy import DDPGTorchPolicy
 
+from parl.model.td3_model import TD3TorchModel
 
-from ray.rllib.policy import Policy, TorchPolicy
-from ray.rllib.policy.torch_policy import _directStepOptimizerSingleton
-from ray.rllib.utils.typing import (
-    TensorType,
-    AlgorithmConfigDict,
-    LocalOptimizer,
-    ModelInputDict
-)
-from ray.rllib.algorithms.dqn.dqn_tf_policy import (
-    PRIO_WEIGHTS,
-)
-
-import gym
+from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_action_dist import (
     TorchDeterministic,
     TorchDirichlet,
@@ -25,8 +16,21 @@ from ray.rllib.models import ModelV2
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
 from ray.rllib.utils.numpy import convert_to_numpy
-from typing import List, Type, Union, Dict, Tuple, Optional, Any
+
 from ray.rllib.utils.framework import try_import_torch
+
+from typing import List, Type, Union, Dict, Tuple, Optional, Any
+from ray.rllib.policy import Policy, TorchPolicy
+from ray.rllib.utils.typing import (
+    TensorType,
+    AlgorithmConfigDict,
+    LocalOptimizer,
+    ModelInputDict
+)
+from ray.rllib.algorithms.dqn.dqn_tf_policy import (
+    PRIO_WEIGHTS,
+)
+
 torch, nn = try_import_torch()
 F = nn.functional
 
@@ -96,6 +100,45 @@ def record_grads(
     else:
         return {}
 
+def make_ddpg_models(policy: Policy) -> ModelV2:
+    num_outputs = int(np.product(policy.observation_space.shape))
+    model = ModelCatalog.get_model_v2(
+        obs_space=policy.observation_space,
+        action_space=policy.action_space,
+        num_outputs=num_outputs,
+        model_config=policy.config["model"],
+        framework=policy.config["framework"],
+        default_model=TD3TorchModel,
+        name="td3_model",
+        actor_hidden_activation=policy.config["actor_hidden_activation"],
+        actor_hiddens=policy.config["actor_hiddens"],
+        critic_hidden_activation=policy.config["critic_hidden_activation"],
+        critic_hiddens=policy.config["critic_hiddens"],
+        twin_q=policy.config["twin_q"],
+        add_layer_norm=(
+            policy.config["exploration_config"].get("type") == "ParameterNoise"
+        ),
+    )
+
+    policy.target_model = ModelCatalog.get_model_v2(
+        obs_space=policy.observation_space,
+        action_space=policy.action_space,
+        num_outputs=num_outputs,
+        model_config=policy.config["model"],
+        framework=policy.config["framework"],
+        default_model=TD3TorchModel,
+        name="target_td3_model",
+        actor_hidden_activation=policy.config["actor_hidden_activation"],
+        actor_hiddens=policy.config["actor_hiddens"],
+        critic_hidden_activation=policy.config["critic_hidden_activation"],
+        critic_hiddens=policy.config["critic_hiddens"],
+        twin_q=policy.config["twin_q"],
+        add_layer_norm=(
+            policy.config["exploration_config"].get("type") == "ParameterNoise"
+        ),
+    )
+
+    return model
 
 class TD3Policy(DDPGTorchPolicy):
     def __init__(
@@ -106,6 +149,15 @@ class TD3Policy(DDPGTorchPolicy):
     ):
         # Note: self.loss() is called in it.
         super().__init__(observation_space, action_space, config)
+
+    @override(TorchPolicyV2)
+    def make_model_and_action_dist(
+        self,
+    ) -> Tuple[ModelV2, Type[TorchDistributionWrapper]]:
+        model = make_ddpg_models(self)
+
+        distr_class = TorchDeterministic
+        return model, distr_class
 
     @override(TorchPolicyV2)
     def extra_grad_process(
@@ -137,17 +189,13 @@ class TD3Policy(DDPGTorchPolicy):
 
         # clip the action to avoid out of bound.
         if not hasattr(self, "action_space_low_tensor"):
-            self.action_space_low_tensor = torch.tensor(
-                self.action_space.low.copy(),
-                dtype=torch.float32,
-                device=self.device
-            )
+            self.action_space_low_tensor = torch.from_numpy(
+                self.action_space.low,
+            ).to(dtype=torch.float32, device=self.device)
         if not hasattr(self, "action_space_high_tensor"):
-            self.action_space_high_tensor = torch.tensor(
+            self.action_space_high_tensor = torch.from_numpy(
                 self.action_space.high.copy(),
-                dtype=torch.float32,
-                device=self.device
-            )
+            ).to(dtype=torch.float32, device=self.device)
 
         input_dict = SampleBatch(
             obs=train_batch[SampleBatch.CUR_OBS], _is_training=True

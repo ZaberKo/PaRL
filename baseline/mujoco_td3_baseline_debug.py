@@ -141,7 +141,7 @@ def main(_config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/td3_baseline_cpu_hopper.yaml")
+                        default="baseline/td3_baseline_cpu.yaml")
     args = parser.parse_args()
 
     import os

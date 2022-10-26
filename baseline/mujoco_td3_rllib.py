@@ -63,15 +63,8 @@ def main(_config):
         rollout_fragment_length=config.rollout_fragment_length,
     )
     td3_config = td3_config.training(
-        policy_delay=2,
-        target_noise=0.2,
-        target_noise_clip=0.5,
-        smooth_target_policy=True,
-        train_batch_size=100,
         replay_buffer_config={
             "type": "MultiAgentReplayBuffer",
-            "capacity": int(1e6),
-            # How many steps of the model to sample before learning starts.
             "learning_starts": 10000,
         }
     )
@@ -85,28 +78,13 @@ def main(_config):
         evaluation_num_workers=config.num_eval_workers,
         evaluation_duration=10,
         evaluation_config={
-            "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
     )
     td3_config = td3_config.exploration(
         exploration_config={
-            # TD3 uses simple Gaussian noise on top of deterministic NN-output
-            # actions (after a possible pure random phase of n timesteps).
-            "type": "GaussianNoise",
-            # For how many timesteps should we return completely random
-            # actions, before we start adding (scaled) noise?
             "random_timesteps": 10000,
-            # Gaussian stddev of action noise for exploration.
-            "stddev": 0.1,
-            # Scaling settings by which the Gaussian noise is scaled before
-            # being added to the actions. NOTE: The scale timesteps start only
-            # after(!) any random steps have been finished.
-            # By default, do not anneal over time (fixed 1.0).
-            "initial_scale": 1.0,
-            "final_scale": 1.0,
-            "scale_timesteps": 1,
         }
     )
     td3_config = td3_config.reporting(
@@ -117,8 +95,9 @@ def main(_config):
 
     td3_config = td3_config.environment(
         env=config.env,
-        env_config=mujoco_config.get(
-            config.env.split("-")[0], {}).get("Parameterizable-v3", {})
+        normalize_actions=False,
+        # env_config=mujoco_config.get(
+        #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
     td3_config = td3_config.callbacks(CPUInitCallback)
     # sac_config = sac_config.python_environment(

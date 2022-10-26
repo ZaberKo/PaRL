@@ -7,32 +7,30 @@ import torch
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
-from ray.rllib.algorithms.sac import SACConfig
-from parl.sac import SAC_Parallel
-from parl.policy import SACPolicy, SACPolicy_FixedAlpha
-from parl.env_config import mujoco_config
+from ray.rllib.algorithms.td3 import TD3Config, TD3
+from ray.rllib.algorithms.ddpg.ddpg_torch_policy import DDPGTorchPolicy
 
-from ray.rllib.utils.exploration import StochasticSampling
+from parl.env_config import mujoco_config
+from parl.policy.td3_policy import record_grads
+
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
-from baseline.mujoco_sac_baseline import Config
+from baseline.mujoco_td3_baseline import Config
 
 import argparse
 from dataclasses import dataclass
-from typing import Union
 
+class TD3Policy(DDPGTorchPolicy):
+    def extra_grad_process(self, optimizer, loss) :
+        # Clip grads if configured.
+        return record_grads(self, optimizer, loss)
 
-class SAC_FixAlpha(SAC_Parallel):
+class TD3Ori(TD3):
     def get_default_policy_class(
             self, config):
-        return SACPolicy_FixedAlpha
+        return TD3Policy
 
-
-class SAC_TuneAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy
 
 
 
@@ -58,71 +56,56 @@ def main(_config):
                         for w in algorithm.workers.remote_workers()]
             ray.wait(pendings, num_returns=len(pendings))
 
-    sac_config = SACConfig().framework('torch')
-    sac_config = sac_config.rollouts(
+    td3_config = TD3Config().framework('torch')
+    td3_config = td3_config.rollouts(
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
-        # no_done_at_end=True,
-        horizon=1000,
-        soft_horizon=False,
     )
-    sac_config = sac_config.training(
-        initial_alpha=config.initial_alpha,
-        train_batch_size=256,
-        training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
+    td3_config = td3_config.training(
         replay_buffer_config={
             "type": "MultiAgentReplayBuffer",
-            "capacity": int(1e6),
-            # How many steps of the model to sample before learning starts.
             "learning_starts": 10000,
         }
     )
-    sac_config = sac_config.resources(
+    td3_config = td3_config.resources(
         num_gpus=1/config.num_tests if config.use_gpu else 0,
         num_cpus_for_local_worker=config.num_cpus_for_local_worker,
         num_cpus_per_worker=config.num_cpus_for_rollout_worker
     )
-    sac_config = sac_config.evaluation(
+    td3_config = td3_config.evaluation(
         evaluation_interval=config.evaluation_interval,
         evaluation_num_workers=config.num_eval_workers,
         evaluation_duration=10,
         evaluation_config={
+            "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
     )
-    sac_config = sac_config.exploration(
+    td3_config = td3_config.exploration(
         exploration_config={
-            "type": StochasticSampling,
-            "random_timesteps": config.random_timesteps
+            "random_timesteps": 10000,
         }
     )
-    sac_config = sac_config.reporting(
+    td3_config = td3_config.reporting(
         min_time_s_per_iteration=0,
         min_sample_timesteps_per_iteration=1000,  # 1000 updates per iteration
         metrics_num_episodes_for_smoothing=5
     )
 
-    sac_config = sac_config.environment(
-        normalize_actions=False,
+    td3_config = td3_config.environment(
         env=config.env,
+        normalize_actions=False,
         env_config=mujoco_config.get(
             config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
-    sac_config = sac_config.callbacks(CPUInitCallback)
+    td3_config = td3_config.callbacks(CPUInitCallback)
     # sac_config = sac_config.python_environment(
     #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(config.num_cpus_for_local_worker)},
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
     # )
-    sac_config = sac_config.to_dict()
-
-    # set the same lr as tianshou
-    sac_config["optimization"] == {
-        "actor_learning_rate": 1e-4,
-        "critic_learning_rate": 1e-4,
-        "entropy_learning_rate": 3e-4,
-    }
+    td3_config = td3_config.to_dict()
 
     num_cpus, num_gpus = config.resources()
 
@@ -130,12 +113,10 @@ def main(_config):
         num_cpus=num_cpus,
         num_gpus=num_gpus,
         local_mode=False,
-        include_dashboard=False
+        include_dashboard=True
     )
 
-
-    SAC=SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha
-    trainer=SAC(config=sac_config)
+    trainer=TD3Ori(config=td3_config)
 
     from tqdm import trange
     from ray.rllib.utils.debug import summarize
@@ -147,14 +128,13 @@ def main(_config):
         print(summarize(res))
         print("+"*20)
 
-
     time.sleep(20)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/sac_baseline_cpu.yaml")
+                        default="baseline/td3_baseline_cpu.yaml")
     parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 

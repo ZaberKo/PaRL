@@ -120,8 +120,6 @@ def main(_config):
         evaluation_num_workers=config.num_eval_workers,
         evaluation_duration=10,
         evaluation_config={
-            "no_done_at_end": False,
-            "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
