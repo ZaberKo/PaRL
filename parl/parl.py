@@ -265,7 +265,7 @@ class PaRL(SAC):
         num_train_batches = round(ts/train_batch_size*2)
         # num_train_batches = 1000
         # num_train_batches = round(ts/10)
-        for _ in trange(num_train_batches):
+        for _ in range(num_train_batches):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(train_batch_size)
 
