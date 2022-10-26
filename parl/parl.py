@@ -180,18 +180,18 @@ class PaRL(SAC):
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
         self.pop_workers = WorkerSet(
-            env_creator=self.env_creator,
-            validate_env=self.validate_env,
-            policy_class=self.get_default_policy_class(self.pop_config),
-            trainer_config=self.pop_config,
-            num_workers=self.pop_size,
-            local_worker=False,
-            logdir=self.logdir,
-        )
-
-        self.ea_config = self.config["ea_config"]
-        self.evolver: NeuroEvolution = CEM(
-            self.ea_config, self.pop_workers, self.workers.local_worker())
+                env_creator=self.env_creator,
+                validate_env=self.validate_env,
+                policy_class=self.get_default_policy_class(self.pop_config),
+                trainer_config=self.pop_config,
+                num_workers=self.pop_size,
+                local_worker=False,
+                logdir=self.logdir,
+            )
+        if self.pop_size>0:
+            self.ea_config = self.config["ea_config"]
+            self.evolver: NeuroEvolution = CEM(
+                self.ea_config, self.pop_workers, self.workers.local_worker())
 
         # ========== remote replay buffer ========
 
@@ -262,10 +262,10 @@ class PaRL(SAC):
         }
 
         # step 3: sample batches from replay buffer and place them on learner queue
-        # num_train_batches = round(ts/train_batch_size)
+        num_train_batches = round(ts/train_batch_size*2)
         # num_train_batches = 1000
-        num_train_batches = ts
-        for _ in trange(num_train_batches):
+        # num_train_batches = round(ts/10)
+        for _ in range(num_train_batches):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(train_batch_size)
 
@@ -281,12 +281,13 @@ class PaRL(SAC):
             )
 
         # step 4: apply NE
-        fitnesses = self._calc_fitness(pop_sample_batches)
-        target_fitness = np.mean([episode[SampleBatch.REWARDS].sum() for episode in flatten_batches(target_sample_batches)])
-        self.evolver.evolve(fitnesses, target_fitness=target_fitness)
-        with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
-            # set pop workers with new generated indv weights
-            self.evolver.sync_pop_weights()
+        if self.pop_size>0:
+            fitnesses = self._calc_fitness(pop_sample_batches)
+            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum() for episode in flatten_batches(target_sample_batches)])
+            self.evolver.evolve(fitnesses, target_fitness=target_fitness)
+            with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
+                # set pop workers with new generated indv weights
+                self.evolver.sync_pop_weights()
 
         # Update replay buffer priorities.
         # update_priorities_in_replay_buffer(
@@ -298,9 +299,10 @@ class PaRL(SAC):
 
         # step 5: retrieve train_results from learner thread and update target network
         train_results = self._process_trained_results()
-        train_results.update({
-            "ea_results": self.evolver.get_iteration_results()
-        })
+        if self.pop_size>0:
+            train_results.update({
+                "ea_results": self.evolver.get_iteration_results()
+            })
 
         # step 6: sync target agent weights to rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
@@ -383,9 +385,10 @@ class PaRL(SAC):
         result["info"].update(
             self._learner_thread.stats()
         )
-        result["info"].update(
-            self.evolver.stats()
-        )
+        if self.pop_size>0:
+            result["info"].update(
+                self.evolver.stats()
+            )
         return result
 
     @override(SAC)
@@ -398,11 +401,11 @@ class PaRL(SAC):
         # if config["num_workers"] <= 0:
         #     raise ValueError("`num_workers` for PaRL must be >= 1!")
 
-        if config["pop_size"] <= 0:
-            raise ValueError("`pop_size` must be >=1")
-        elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
-            raise ValueError(
-                f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
+        # if config["pop_size"] <= 0:
+        #     raise ValueError("`pop_size` must be >=1")
+        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
+        #     raise ValueError(
+        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
 
         if config["evaluation_interval"] <= 0:
             raise ValueError("evaluation_interval must >=1")

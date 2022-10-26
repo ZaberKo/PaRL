@@ -26,7 +26,7 @@ exploration_config:
   # random_timesteps: 10000
 
 # ============= pop actors config ==============
-pop_size: 16 # number of pop_workers
+pop_size: 10 # number of pop_workers
 pop_config:
   explore: true
   num_envs_per_worker: 1
@@ -45,9 +45,9 @@ ea_config:
   noise_end: !!float 1e-5
 
 # ========= evaluation worker config ==========
-evaluation_num_workers: 16
+evaluation_num_workers: 10
 evaluation_interval: 1
-evaluation_duration: 16
+evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
   explore: false
@@ -87,7 +87,7 @@ target_network_update_freq: 1 # unit: iteration
 replay_buffer_config:
   type: MultiAgentReplayBuffer
   capacity: !!int 1000000
-  learning_starts: 16000 # 16*1000
+  learning_starts: 10000
   # num_replay_buffer_shards: 1
 
 compress_observations: false # also effect rollout transmission
@@ -98,4 +98,4 @@ tuner_config:
   checkpoint_freq: 1 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 300
+    training_iteration: 3000
