@@ -17,7 +17,7 @@ from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
-from .mujoco_sac_baseline import Config
+from baseline.mujoco_sac_baseline import Config
 
 import argparse
 from dataclasses import dataclass

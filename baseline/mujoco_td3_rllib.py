@@ -16,7 +16,7 @@ from parl.policy.td3_policy import record_grads
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
-from .mujoco_td3_baseline import Config
+from baseline.mujoco_td3_baseline import Config
 
 import argparse
 from dataclasses import dataclass
@@ -61,7 +61,6 @@ def main(_config):
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
-        horizon=1000,
     )
     td3_config = td3_config.training(
         policy_delay=2,
@@ -70,7 +69,6 @@ def main(_config):
         smooth_target_policy=True,
         train_batch_size=100,
         replay_buffer_config={
-            "_enable_replay_buffer_api": True,
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.

@@ -17,7 +17,7 @@ from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
-from .mujoco_sac_baseline import Config
+from baseline.mujoco_sac_baseline import Config
 
 import argparse
 from dataclasses import dataclass
@@ -29,42 +29,6 @@ class SACTest(SAC_Parallel):
             self, config):
         return SACPolicyTest
 
-
-
-
-
-@dataclass
-class Config:
-    env: str = "HalfCheetah-v3"
-
-    num_rollout_workers: int = 0
-    num_eval_workers: int = 16
-
-    rollout_fragment_length: int = 50
-    enable_multiple_updates: bool = True
-    rollout_vs_train: Union[int, float] = 1
-
-    num_cpus_for_local_worker: int = 1
-    num_cpus_for_rollout_worker: int = 1
-
-    use_gpu: bool = True
-    autotune_alpha: bool = False
-    initial_alpha: float = 1.0
-
-    num_tests: int = 3
-    training_iteration: int = 3000
-    checkpoint_freq: int = 10
-    evaluation_interval: int = 10
-
-    random_timesteps: int = 0
-
-    save_folder: str = "results"
-
-    def resources(self):
-        num_cpus = (self.num_rollout_workers*self.num_cpus_for_rollout_worker +
-                    self.num_cpus_for_local_worker+self.num_eval_workers)*self.num_tests
-        num_gpus = 1 if self.use_gpu else 0
-        return num_cpus, num_gpus
 
 
 def main(_config):
