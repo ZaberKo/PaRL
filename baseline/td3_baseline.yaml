@@ -1,7 +1,7 @@
 env: "HalfCheetah-v3"
 
 num_rollout_workers: 0
-num_eval_workers: 16
+num_eval_workers: 1
 
 rollout_fragment_length: 1 # fixed
 
@@ -13,4 +13,4 @@ use_gpu: true
 num_tests: 3
 training_iteration: 3000
 checkpoint_freq: 10
-evaluation_interval: 10
+evaluation_interval: 2
