@@ -85,7 +85,6 @@ def main(_config):
         smooth_target_policy=True,
         train_batch_size=100,
         replay_buffer_config={
-            "_enable_replay_buffer_api": True,
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.

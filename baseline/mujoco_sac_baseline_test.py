@@ -102,7 +102,6 @@ def main(_config):
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
-            "_enable_replay_buffer_api": True,
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
