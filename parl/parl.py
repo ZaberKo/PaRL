@@ -262,7 +262,7 @@ class PaRL(SAC):
         }
 
         # step 3: sample batches from replay buffer and place them on learner queue
-        num_train_batches = round(ts/train_batch_size*2)
+        num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
         # num_train_batches = round(ts/10)
         for _ in range(num_train_batches):

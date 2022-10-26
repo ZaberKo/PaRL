@@ -3,7 +3,7 @@
 import gym
 from gym import envs
 
-envs.registry
+env=gym.make("Ant-v3")
 # %%
-
+env._max_episode_steps
 # %%
