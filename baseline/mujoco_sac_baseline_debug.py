@@ -5,10 +5,7 @@ from ruamel.yaml import YAML
 import ray
 import torch
 
-from ray.tune import Tuner, TuneConfig
-from ray.air import RunConfig, CheckpointConfig
-from ray.rllib.algorithms.sac import SACConfig
-from parl.sac import SAC_Parallel
+from parl.sac import SAC_Parallel, SACConfigMod
 from parl.policy import SACPolicy, SACPolicy_FixedAlpha
 from parl.env_config import mujoco_config
 
@@ -58,7 +55,7 @@ def main(_config):
                         for w in algorithm.workers.remote_workers()]
             ray.wait(pendings, num_returns=len(pendings))
 
-    sac_config = SACConfig().framework('torch')
+    sac_config = SACConfigMod().framework('torch')
     sac_config = sac_config.rollouts(
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
@@ -76,6 +73,14 @@ def main(_config):
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
             "learning_starts": 10000,
+        },
+        optimization={
+            "actor_learning_rate": 1e-4,
+            "critic_learning_rate": 1e-4,
+            "entropy_learning_rate": 3e-4,
+            "actor_grad_clip": 10,
+            "critic_grad_clip": 40,
+            "alpha_grad_clip": 5
         }
     )
     sac_config = sac_config.resources(
@@ -116,14 +121,6 @@ def main(_config):
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
     # )
     sac_config = sac_config.to_dict()
-
-    # set the same lr as tianshou
-    sac_config["optimization"] == {
-        "actor_learning_rate": 1e-4,
-        "critic_learning_rate": 1e-4,
-        "entropy_learning_rate": 3e-4,
-    }
-
     num_cpus, num_gpus = config.resources()
 
     ray.init(

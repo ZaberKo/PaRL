@@ -290,12 +290,18 @@ def record_grads(
 def apply_and_record_grad_clipping(
     policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
 ) -> Dict[str, TensorType]:
+    optim_config=policy.config["optimization"]
+    clip_value = np.inf
+    if policy.actor_optim == optimizer:
+        clip_value=optim_config.get("actor_grad_clip", np.inf)
+    elif policy.critic_optims[0] == optimizer:
+        clip_value=optim_config.get("critic_grad_clip", np.inf)
+    elif policy.critic_optims[1] == optimizer:
+        clip_value=optim_config.get("critic_grad_clip", np.inf)
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
+        clip_value=optim_config.get("alpha_grad_clip", np.inf)
     grad_gnorm = 0
-    if policy.config["grad_clip"] is not None:
-        clip_value = policy.config["grad_clip"]
-    else:
-        clip_value = np.inf
-
+    
     for param_group in optimizer.param_groups:
         # Make sure we only pass params with grad != None into torch
         # clip_grad_norm_. Would fail otherwise.
@@ -308,7 +314,7 @@ def apply_and_record_grad_clipping(
             if isinstance(global_norm, torch.Tensor):
                 global_norm = global_norm.cpu().numpy()
 
-            grad_gnorm += min(global_norm, clip_value)
+            grad_gnorm += global_norm
 
     if policy.actor_optim == optimizer:
         return {"actor_gnorm": grad_gnorm}
