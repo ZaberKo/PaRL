@@ -16,6 +16,8 @@ from parl.policy.td3_policy import record_grads
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
 
+from .mujoco_td3_baseline import Config
+
 import argparse
 from dataclasses import dataclass
 
@@ -30,32 +32,7 @@ class TD3Ori(TD3):
         return TD3Policy
 
 
-@dataclass
-class Config:
-    env: str = "HalfCheetah-v3"
 
-    num_rollout_workers: int = 0
-    num_eval_workers: int = 16
-
-    rollout_fragment_length: int = 1
-
-    num_cpus_for_local_worker: int = 1
-    num_cpus_for_rollout_worker: int = 1
-
-    use_gpu: bool = True
-
-    num_tests: int = 3
-    training_iteration: int = 3000
-    checkpoint_freq: int = 10
-    evaluation_interval: int = 10
-
-    save_folder: str = "results"
-
-    def resources(self):
-        num_cpus = (self.num_rollout_workers*self.num_cpus_for_rollout_worker +
-                    self.num_cpus_for_local_worker+self.num_eval_workers)*self.num_tests
-        num_gpus = 1 if self.use_gpu else 0
-        return num_cpus, num_gpus
 
 
 def main(_config):

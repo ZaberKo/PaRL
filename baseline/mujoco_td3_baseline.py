@@ -40,6 +40,8 @@ class Config:
 
     save_folder: str = "results"
 
+    grad_clip: float = None
+
     def resources(self):
         num_cpus = (self.num_rollout_workers*self.num_cpus_for_rollout_worker +
                     self.num_cpus_for_local_worker+self.num_eval_workers)*self.num_tests
@@ -76,6 +78,7 @@ def main(_config):
         horizon=1000,
     )
     td3_config = td3_config.training(
+        # grad_clip=config.grad_clip,
         policy_delay=2,
         target_noise=0.2,
         target_noise_clip=0.5,
