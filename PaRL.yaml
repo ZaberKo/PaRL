@@ -95,7 +95,7 @@ compress_observations: false # also effect rollout transmission
 # ============= checkpoint & stopper config ===============
 tuner_config:
   num_samples: 1
-  checkpoint_freq: 1 # 0: disable
+  checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
     training_iteration: 10000
