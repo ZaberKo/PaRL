@@ -71,11 +71,17 @@ class SACConfigMod(SACConfig):
         super().training(**kwargs)
         if optimization is not None:
             self.optimization.update(optimization)
+        
+        return self
 
 
 class SAC_Parallel(SAC):
     _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
         ["extra_python_environs_for_driver"]
+
+    @classmethod
+    def get_default_config(cls) -> AlgorithmConfigDict:
+        return SACConfigMod().to_dict()
 
     def training_step(self) -> ResultDict:
         """DQN training iteration function.

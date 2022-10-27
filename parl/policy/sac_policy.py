@@ -131,7 +131,7 @@ def build_sac_model_and_action_dist_fix(
 
     default_model_cls = SACTorchModel
 
-    num_outputs = int(np.product(policy.observation_space.shape))
+    num_outputs = int(np.product(obs_space.shape))
 
     model = ModelCatalog.get_model_v2(
         obs_space=obs_space,
@@ -203,10 +203,10 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
     }
 
     if hasattr(policy, "alpha_optim"):
-        states["alpha_loss"]= torch.mean(torch.stack(policy.get_tower_stats("alpha_loss")))
+        states["alpha_loss"] = torch.mean(
+            torch.stack(policy.get_tower_stats("alpha_loss")))
 
     return states
-
 
 
 def concat_multi_gpu_td_errors(
@@ -225,7 +225,8 @@ def concat_multi_gpu_td_errors(
     """
     td_error = torch.cat(
         [
-            t.tower_stats.get("td_error", torch.tensor([0.0])).to(policy.device)
+            t.tower_stats.get("td_error", torch.tensor(
+                [0.0])).to(policy.device)
             for t in policy.model_gpu_towers
         ],
         dim=0,
@@ -235,6 +236,7 @@ def concat_multi_gpu_td_errors(
         # "td_error": td_error,
         "mean_td_error": torch.mean(td_error),
     }
+
 
 def setup_late_mixins(
     policy: Policy,
@@ -282,30 +284,34 @@ def record_grads(
         return {"critic_gnorm": grad_gnorm}
     elif policy.critic_optims[1] == optimizer:
         return {"twin_critic_gnorm": grad_gnorm}
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
         return {"alpha_gnorm": grad_gnorm}
     else:
         return {}
 
+
 def apply_and_record_grad_clipping(
     policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
 ) -> Dict[str, TensorType]:
-    optim_config=policy.config["optimization"]
+    optim_config = policy.config["optimization"]
     clip_value = np.inf
     if policy.actor_optim == optimizer:
-        clip_value=optim_config.get("actor_grad_clip", np.inf)
+        clip_value = optim_config.get("actor_grad_clip", np.inf)
     elif policy.critic_optims[0] == optimizer:
-        clip_value=optim_config.get("critic_grad_clip", np.inf)
+        clip_value = optim_config.get("critic_grad_clip", np.inf)
     elif policy.critic_optims[1] == optimizer:
-        clip_value=optim_config.get("critic_grad_clip", np.inf)
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
-        clip_value=optim_config.get("alpha_grad_clip", np.inf)
+        clip_value = optim_config.get("critic_grad_clip", np.inf)
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
+        clip_value = optim_config.get("alpha_grad_clip", np.inf)
+    if clip_value is None:
+        clip_value = np.inf
     grad_gnorm = 0
-    
+
     for param_group in optimizer.param_groups:
         # Make sure we only pass params with grad != None into torch
         # clip_grad_norm_. Would fail otherwise.
-        params = list(filter(lambda p: p.grad is not None, param_group["params"]))
+        params = list(
+            filter(lambda p: p.grad is not None, param_group["params"]))
         if params:
             # PyTorch clips gradients inplace and returns the norm before clipping
             # We therefore need to compute grad_gnorm further down (fixes #4965)
@@ -322,7 +328,7 @@ def apply_and_record_grad_clipping(
         return {"critic_gnorm": grad_gnorm}
     elif policy.critic_optims[1] == optimizer:
         return {"twin_critic_gnorm": grad_gnorm}
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim==optimizer:
+    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
         return {"alpha_gnorm": grad_gnorm}
     else:
         return {}
@@ -360,7 +366,8 @@ SACPolicy = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin,
+            ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )
@@ -380,7 +387,8 @@ SACPolicy_FixedAlpha = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin,
+            ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )
@@ -398,7 +406,8 @@ SACPolicyTest = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACLearning, TargetNetworkMixin, ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACLearning, TargetNetworkMixin,
+            ComputeTDErrorMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )

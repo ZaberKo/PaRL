@@ -98,7 +98,7 @@ def main(_config):
         soft_horizon=False,
     )
     sac_config = sac_config.training(
-        grad_clip=config.grad_clip,
+        # grad_clip=config.grad_clip,
         initial_alpha=config.initial_alpha,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
@@ -109,12 +109,12 @@ def main(_config):
             "learning_starts": 10000,
         },
         optimization={
-            "actor_learning_rate": 1e-4,
-            "critic_learning_rate": 1e-4,
+            "actor_learning_rate": 3e-4,
+            "critic_learning_rate": 3e-4,
             "entropy_learning_rate": 3e-4,
-            "actor_grad_clip": 10,
-            "critic_grad_clip": 40,
-            "alpha_grad_clip": 5
+            # "actor_grad_clip": 10,
+            # "critic_grad_clip": 40,
+            # "alpha_grad_clip": 5
         }
     )
     sac_config = sac_config.resources(
@@ -145,8 +145,8 @@ def main(_config):
 
     sac_config = sac_config.environment(
         env=config.env,
-        env_config=mujoco_config.get(
-            config.env.split("-")[0], {}).get("Parameterizable-v3", {})
+        # env_config=mujoco_config.get(
+        #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
     sac_config = sac_config.callbacks(CPUInitCallback)
     # sac_config = sac_config.python_environment(
