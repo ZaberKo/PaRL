@@ -99,10 +99,13 @@ def main(config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str, default="PaRL.yaml")
+    parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 
     yaml = YAML(typ='safe')
     with open(args.config_file, 'r') as f:
         config = yaml.load(f)
     # config=namedtuple('Config',config)(**config)
+    if args.env:
+        config["env"]=args.env
     main(config)

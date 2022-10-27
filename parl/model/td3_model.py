@@ -75,7 +75,7 @@ class TD3TorchModel(TorchModelV2, nn.Module):
         assert self.obs_dim == num_outputs
 
         # Build the policy network.
-        self.policy_model = FullyConnectedNetwork(
+        self.action_model = FullyConnectedNetwork(
             num_inputs=self.obs_dim,
             num_outputs=self.action_dim,
             hiddens=actor_hiddens,
@@ -151,25 +151,17 @@ class TD3TorchModel(TorchModelV2, nn.Module):
         Returns:
             tensor of shape [BATCH_SIZE, action_out_size]
         """
-        return self.policy_model(model_out)
+        return self.action_model(model_out)
 
     def policy_variables(
-        self, as_dict: bool = False
+        self
     ) -> Union[List[TensorType], Dict[str, TensorType]]:
         """Return the list of variables for the policy net."""
-        if as_dict:
-            return self.policy_model.state_dict()
-        return list(self.policy_model.parameters())
+        return list(self.action_model.parameters())
 
     def q_variables(
-        self, as_dict=False
+        self
     ) -> Union[List[TensorType], Dict[str, TensorType]]:
-        """Return the list of variables for Q / twin Q nets."""
-        if as_dict:
-            return {
-                **self.q_model.state_dict(),
-                **(self.twin_q_model.state_dict() if self.twin_q_model else {}),
-            }
         return list(self.q_model.parameters()) + (
             list(self.twin_q_model.parameters()) if self.twin_q_model else []
         )

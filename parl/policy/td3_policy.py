@@ -3,6 +3,7 @@ import gym
 from ray.rllib.algorithms.ddpg.ddpg_torch_policy import DDPGTorchPolicy
 
 from parl.model.td3_model import TD3TorchModel
+from .td3_policy_mixin import TD3EvolveMixin
 
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_action_dist import (
@@ -140,7 +141,7 @@ def make_ddpg_models(policy: Policy) -> ModelV2:
 
     return model
 
-class TD3Policy(DDPGTorchPolicy):
+class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
     def __init__(
         self,
         observation_space: gym.spaces.Space,
@@ -148,7 +149,8 @@ class TD3Policy(DDPGTorchPolicy):
         config: AlgorithmConfigDict,
     ):
         # Note: self.loss() is called in it.
-        super().__init__(observation_space, action_space, config)
+        DDPGTorchPolicy.__init__(self, observation_space, action_space, config)
+        TD3EvolveMixin.__init__(self)
 
     @override(TorchPolicyV2)
     def make_model_and_action_dist(
