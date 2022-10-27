@@ -1,5 +1,5 @@
 import numpy as np
-from ray.rllib.algorithms.sac import SAC
+from ray.rllib.algorithms.sac import SAC, SACConfig
 
 
 from ray.rllib.execution.rollout_ops import (
@@ -54,9 +54,29 @@ def calculate_rr_weights(config: AlgorithmConfigDict):
         return [1, int(np.round(sample_and_train_weight))]
 
 
+class SACConfigMod(SACConfig):
+    def __init__(self, algo_class=None):
+        super().__init__(algo_class=algo_class or SAC_Parallel)
+
+        self.optimization = {
+            "actor_learning_rate": 3e-4,
+            "critic_learning_rate": 3e-4,
+            "entropy_learning_rate": 3e-4,
+            "actor_grad_clip": None,
+            "critic_grad_clip": None,
+            "alpha_grad_clip": None
+        }
+
+    def training(self, *, optimization: dict = None, **kwargs):
+        super().training(**kwargs)
+        if optimization is not None:
+            self.optimization.update(optimization)
+
+
 class SAC_Parallel(SAC):
     _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
         ["extra_python_environs_for_driver"]
+
     def training_step(self) -> ResultDict:
         """DQN training iteration function.
 
