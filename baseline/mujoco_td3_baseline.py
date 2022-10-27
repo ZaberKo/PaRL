@@ -101,7 +101,6 @@ def main(_config):
         evaluation_num_workers=config.num_eval_workers,
         evaluation_duration=10,
         evaluation_config={
-            "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
@@ -133,8 +132,8 @@ def main(_config):
 
     td3_config = td3_config.environment(
         env=config.env,
-        env_config=mujoco_config.get(
-            config.env.split("-")[0], {}).get("Parameterizable-v3", {})
+        # env_config=mujoco_config.get(
+        #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})
     )
     td3_config = td3_config.callbacks(CPUInitCallback)
     # sac_config = sac_config.python_environment(

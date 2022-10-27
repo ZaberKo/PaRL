@@ -98,10 +98,8 @@ class SquashedGaussian(TorchSquashedGaussian):
 
 
 class SquashedGaussian2(TorchDistributionWrapper):
-    """A tanh-squashed Gaussian distribution defined by: mean, std, low, high.
-
-    The distribution will never return low or high exactly, but
-    `low`+SMALL_NUMBER or `high`-SMALL_NUMBER respectively.
+    """
+        only output action [-1, 1]
     """
 
     def __init__(
@@ -145,13 +143,13 @@ class SquashedGaussian2(TorchDistributionWrapper):
     @override(ActionDistribution)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)
-        u = self._unsquash(x)
+        z = self._unsquash(x)
         # For safety reasons, clamp somehow, only then sum up.
-        log_prob_gaussian = self.dist.log_prob(u).sum(dim=-1)
+        log_prob_gaussian = self.dist.log_prob(z).sum(dim=-1)
 
         # Note: use magic code from Spinning-up repo
         log_prob = log_prob_gaussian - 2*torch.sum(
-            np.log(2)-u-F.softplus(-2*u),
+            np.log(2)-z-F.softplus(-2*z),
             dim=-1)
         return log_prob
 
@@ -160,8 +158,7 @@ class SquashedGaussian2(TorchDistributionWrapper):
         actions = self._squash(z)
 
         # For safety reasons, clamp somehow, only then sum up.
-        log_prob_gaussian = torch.clamp(
-            self.dist.log_prob(z), -100, 100).sum(dim=-1)
+        log_prob_gaussian = self.dist.log_prob(z).sum(dim=-1)
         # Note: use magic code from Spinning-up repo
         log_prob = log_prob_gaussian - 2*torch.sum(
             np.log(2)-z-F.softplus(-2*z), dim=-1)
@@ -176,9 +173,7 @@ class SquashedGaussian2(TorchDistributionWrapper):
         raise ValueError("KL not defined for SquashedGaussian!")
 
     def _squash(self, raw_values: TensorType) -> TensorType:
-        # Returned values are within [low, high] (including `low` and `high`).
-
-        return torch.clamp(torch.tanh(raw_values), -1.0, 1.0)
+        return torch.tanh(raw_values)
 
     def _unsquash(self, values: TensorType) -> TensorType:
         # Stabilize input to atanh.
@@ -187,6 +182,79 @@ class SquashedGaussian2(TorchDistributionWrapper):
         )
         unsquashed = torch.atanh(save_normed_values)
         return unsquashed
+
+    @staticmethod
+    @override(ActionDistribution)
+    def required_model_output_shape(
+        action_space: gym.Space, model_config: ModelConfigDict
+    ) -> Union[int, np.ndarray]:
+        return np.prod(action_space.shape, dtype=np.int32) * 2
+
+
+class SquashedGaussian3(TorchDistributionWrapper):
+    """
+        only output action [-1, 1], implemented by native torch.distribution
+    """
+
+    def __init__(
+        self,
+        inputs: List[TensorType],
+        model: TorchModelV2,
+    ):
+        """Parameterizes the distribution via `inputs`.
+
+        Args:
+            low: The lowest possible sampling value
+                (excluding this value).
+            high: The highest possible sampling value
+                (excluding this value).
+        """
+        super().__init__(inputs, model)
+        # Split inputs into mean and log(std).
+        mean, log_std = torch.chunk(self.inputs, 2, dim=-1)
+        # Clip `scale` values (coming from NN) to reasonable values.
+        log_std = torch.clamp(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT)
+        std = torch.exp(log_std)
+        self.base_dist = torch.distributions.normal.Normal(mean, std)
+        self.dist=torch.distributions.TransformedDistribution(
+            torch.distributions.Independent(self.base_dist, len(mean.shape)-1),
+            torch.distributions.TanhTransform
+        )
+
+        self.mean = mean
+        self.std = std
+
+    @override(ActionDistribution)
+    def deterministic_sample(self) -> TensorType:
+        self.last_sample = torch.tanh(self.mean)
+        return self.last_sample
+
+    @override(TorchDistributionWrapper)
+    def sample(self) -> TensorType:
+        # Use the reparameterization version of `dist.sample` to allow for
+        # the results to be backprop'able e.g. in a loss term.
+
+        self.last_sample = self.dist.rsample()
+        return self.last_sample
+
+    @override(ActionDistribution)
+    def logp(self, x: TensorType) -> TensorType:
+        
+        return self.dist.log_prob(x)
+
+    def sample_logp(self):
+        actions = self.dist.rsample()
+        log_prob = self.dist.log_prob(actions)
+
+        return actions, log_prob
+
+    @override(TorchDistributionWrapper)
+    def entropy(self) -> TensorType:
+        raise ValueError("Entropy not defined for SquashedGaussian!")
+
+    @override(TorchDistributionWrapper)
+    def kl(self, other: ActionDistribution) -> TensorType:
+        raise ValueError("KL not defined for SquashedGaussian!")
 
     @staticmethod
     @override(ActionDistribution)

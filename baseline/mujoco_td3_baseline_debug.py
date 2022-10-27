@@ -20,10 +20,6 @@ from dataclasses import dataclass
 
 from baseline.mujoco_td3_baseline import Config
 
-
-
-
-
 def main(_config):
     config = Config(**_config)
 

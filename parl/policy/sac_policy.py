@@ -23,7 +23,7 @@ from ray.rllib.utils.framework import try_import_torch
 from parl.model.sac_model import SACTorchModel
 from .sac_policy_mixin import SACEvolveMixin, SACLearning
 from .policy_mixin import TorchPolicyMod
-from .action_dist import SquashedGaussian
+from .action_dist import SquashedGaussian, SquashedGaussian2, SquashedGaussian3
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
 
 import gym
