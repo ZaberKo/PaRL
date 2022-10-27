@@ -46,7 +46,7 @@ ea_config:
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
-evaluation_interval: 1
+evaluation_interval: 10
 evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
@@ -95,7 +95,7 @@ compress_observations: false # also effect rollout transmission
 # ============= checkpoint & stopper config ===============
 tuner_config:
   num_samples: 3
-  checkpoint_freq: 1 # 0: disable
+  checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 3000
+    training_iteration: 10000
