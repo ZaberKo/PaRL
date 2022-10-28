@@ -66,9 +66,8 @@ def main(_config):
     td3_config = td3_config.evaluation(
         evaluation_interval=config.evaluation_interval,
         evaluation_num_workers=config.num_eval_workers,
-        evaluation_duration=config.num_eval_workers*1,
+        evaluation_duration=10,
         evaluation_config={
-            "horizon": None,
             "num_envs_per_worker": 1,
             "explore": False  # greedy eval
         }
@@ -138,6 +137,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
                         default="baseline/td3_baseline_cpu.yaml")
+    parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 
     import os
@@ -146,4 +146,7 @@ if __name__ == "__main__":
     yaml = YAML(typ='safe')
     with open(args.config_file, 'r') as f:
         config = yaml.load(f)
+
+    if args.env:
+        config["env"] = args.env
     main(config)

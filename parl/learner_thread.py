@@ -48,7 +48,6 @@ class MultiGPULearnerThread(threading.Thread):
         self.stopped = False
         self.num_steps = 0
 
-
         self.policy_map = self.local_worker.policy_map
         self.devices = next(iter(self.policy_map.values())).devices
         logger.info("MultiGPULearnerThread devices {}".format(self.devices))
@@ -126,7 +125,7 @@ class MultiGPULearnerThread(threading.Thread):
     def stats(self) -> Dict:
         """Add internal metrics to a result dict."""
 
-        data={
+        data = {
             "learner_queue": self.learner_queue_size.stats(),
             "learner_timer": {
                 "learner_grad_time_ms": timer_to_ms(self.grad_timer),

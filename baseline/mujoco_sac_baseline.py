@@ -112,9 +112,9 @@ def main(_config):
             "actor_learning_rate": 3e-4,
             "critic_learning_rate": 3e-4,
             "entropy_learning_rate": 3e-4,
-            # "actor_grad_clip": 10,
-            # "critic_grad_clip": 40,
-            # "alpha_grad_clip": 5
+            "actor_grad_clip": 10,
+            "critic_grad_clip": 80,
+            "alpha_grad_clip": 1
         }
     )
     sac_config = sac_config.resources(

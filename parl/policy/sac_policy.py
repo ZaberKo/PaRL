@@ -295,13 +295,19 @@ def apply_and_record_grad_clipping(
 ) -> Dict[str, TensorType]:
     optim_config = policy.config["optimization"]
     clip_value = np.inf
+    key = None
+
     if policy.actor_optim == optimizer:
+        key = "actor_gnorm"
         clip_value = optim_config.get("actor_grad_clip", np.inf)
     elif policy.critic_optims[0] == optimizer:
+        key = "critic_gnorm"
         clip_value = optim_config.get("critic_grad_clip", np.inf)
     elif policy.critic_optims[1] == optimizer:
+        key = "twin_critic_gnorm"
         clip_value = optim_config.get("critic_grad_clip", np.inf)
     elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
+        key = "alpha_gnorm"
         clip_value = optim_config.get("alpha_grad_clip", np.inf)
     if clip_value is None:
         clip_value = np.inf
@@ -322,14 +328,8 @@ def apply_and_record_grad_clipping(
 
             grad_gnorm += global_norm
 
-    if policy.actor_optim == optimizer:
-        return {"actor_gnorm": grad_gnorm}
-    elif policy.critic_optims[0] == optimizer:
-        return {"critic_gnorm": grad_gnorm}
-    elif policy.critic_optims[1] == optimizer:
-        return {"twin_critic_gnorm": grad_gnorm}
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
-        return {"alpha_gnorm": grad_gnorm}
+    if key is not None:
+        return {key: grad_gnorm}
     else:
         return {}
 
