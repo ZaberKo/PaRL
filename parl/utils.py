@@ -4,6 +4,8 @@ import numpy as np
 import ray
 import tree
 import importlib
+import contextlib
+
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.framework import try_import_torch
@@ -65,9 +67,22 @@ def import_policy_class(policy_name) -> Policy:
 
 def disable_grad(params: list[torch.Tensor]):
     for param in params:
-        param.requires_grad=False
-        
+        param.requires_grad = False
+
+
 def enable_grad(params: list[torch.Tensor]):
     for param in params:
-        param.requires_grad=False
+        param.requires_grad = False
+
+@contextlib.contextmanager
+def disable_grad_ctx(params: list[torch.Tensor]):
+    prev_states=[p.required_grad for p in params]
+    try:
+        for param in params:
+            param.requires_grad = False
+        yield
+    finally:
+        for param, flag in zip(params, prev_states):
+            param.requires_grad = flag
+
 

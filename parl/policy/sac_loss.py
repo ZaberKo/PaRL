@@ -1,7 +1,8 @@
-
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.torch_utils import huber_loss
 from ray.rllib.algorithms.dqn.dqn_tf_policy import PRIO_WEIGHTS
+
+from parl.utils import disable_grad_ctx
 
 from typing import List, Type, Union, Dict, Tuple, Optional
 from ray.rllib.policy.policy import Policy
@@ -197,14 +198,17 @@ def actor_critic_loss_fix(
     with torch.no_grad():
         model.log_alpha.clamp_(min=-20, max=2)
 
-    critic_loss = calc_critic_loss(policy, model, dist_class, train_batch)
 
-    actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
+    critic_losses = calc_critic_loss(policy, model, dist_class, train_batch)
+
+    with disable_grad_ctx(model.q_variables()):
+        actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
+        
 
     alpha_loss = calc_alpha_loss(policy, model, dist_class, train_batch)
 
     # Return all loss terms corresponding to our optimizers.
-    return tuple([actor_loss] + critic_loss + [alpha_loss])
+    return tuple([actor_loss] + critic_losses + [alpha_loss])
 
 
 # disable alpha tuning and disable priority replay
@@ -229,7 +233,8 @@ def actor_critic_loss_no_alpha(
 
     critic_loss = calc_critic_loss(policy, model, dist_class, train_batch)
 
-    actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
+    with disable_grad_ctx(model.q_variables()):
+        actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
 
     # Return all loss terms corresponding to our optimizers.
     return tuple([actor_loss] + critic_loss)

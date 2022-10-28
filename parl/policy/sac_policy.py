@@ -25,6 +25,7 @@ from .sac_policy_mixin import SACEvolveMixin, SACLearning
 from .policy_mixin import TorchPolicyMod
 from .action_dist import SquashedGaussian, SquashedGaussian2, SquashedGaussian3
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
+from parl.utils import disable_grad_ctx
 
 import gym
 from ray.rllib.policy import Policy, TorchPolicy
@@ -339,7 +340,8 @@ def apply_gradients(policy, gradients) -> None:
     # For policy gradient, update policy net one time v.s.
     # update critic net `policy_delay` time(s).
     if policy.global_step % policy.config.get("policy_delay", 1) == 0:
-        policy.actor_optim.step()
+        with disable_grad_ctx(policy.model.q_variables()):
+            policy.actor_optim.step()
 
     for critic_opt in policy.critic_optims:
         critic_opt.step()
