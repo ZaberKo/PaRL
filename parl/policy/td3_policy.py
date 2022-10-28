@@ -1,15 +1,14 @@
 import numpy as np
 import gym
-from ray.rllib.algorithms.ddpg.ddpg_torch_policy import DDPGTorchPolicy
+from ray.rllib.algorithms.td3 import TD3Config
 
 from parl.model.td3_model import TD3TorchModel
-from .td3_policy_mixin import TD3EvolveMixin
-
+from .td3_policy_mixin import TD3EvolveMixin, TargetNetworkMixin
+from .policy_mixin import concat_multi_gpu_td_errors
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_action_dist import (
     TorchDeterministic,
-    TorchDirichlet,
-    TorchDistributionWrapper,
+    TorchDistributionWrapper
 )
 from ray.rllib.utils.annotations import override
 from ray.rllib.policy.sample_batch import SampleBatch
@@ -17,19 +16,20 @@ from ray.rllib.models import ModelV2
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
 from ray.rllib.utils.numpy import convert_to_numpy
-
 from ray.rllib.utils.framework import try_import_torch
+from ray.rllib.algorithms.ddpg.utils import make_ddpg_models, validate_spaces
 
 from typing import List, Type, Union, Dict, Tuple, Optional, Any
 from ray.rllib.policy import Policy, TorchPolicy
 from ray.rllib.utils.typing import (
     ModelGradients,
     TensorType,
-    AlgorithmConfigDict,
-    LocalOptimizer
+    AlgorithmConfigDict
 )
+from ray.rllib.evaluation import Episode
 from ray.rllib.algorithms.dqn.dqn_tf_policy import (
     PRIO_WEIGHTS,
+    postprocess_nstep_and_prio
 )
 
 torch, nn = try_import_torch()
@@ -40,33 +40,7 @@ def l2_loss(x: TensorType) -> TensorType:
     return 0.5 * torch.sum(torch.pow(x, 2.0))
 
 
-def concat_multi_gpu_td_errors(
-    policy: Union["TorchPolicy", "TorchPolicyV2"]
-) -> Dict[str, TensorType]:
-    """Concatenates multi-GPU (per-tower) TD error tensors given TorchPolicy.
 
-    TD-errors are extracted from the TorchPolicy via its tower_stats property.
-
-    Args:
-        policy: The TorchPolicy to extract the TD-error values from.
-
-    Returns:
-        A dict mapping strings "td_error" and "mean_td_error" to the
-        corresponding concatenated and mean-reduced values.
-    """
-    td_error = torch.cat(
-        [
-            t.tower_stats.get("td_error", torch.tensor(
-                [0.0])).to(policy.device)
-            for t in policy.model_gpu_towers
-        ],
-        dim=0,
-    )
-    policy.td_error = td_error
-    return {
-        # "td_error": td_error,
-        "mean_td_error": torch.mean(td_error),
-    }
 
 def make_ddpg_models(policy: Policy) -> ModelV2:
     num_outputs = int(np.product(policy.observation_space.shape))
@@ -109,15 +83,33 @@ def make_ddpg_models(policy: Policy) -> ModelV2:
     return model
 
 
-class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
+class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
     def __init__(
         self,
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         config: AlgorithmConfigDict,
     ):
-        # Note: self.loss() is called in it.
-        DDPGTorchPolicy.__init__(self, observation_space, action_space, config)
+        config = dict(TD3Config().to_dict(), **config)
+
+        # Create global step for counting the number of update operations.
+        self.global_step = 0
+
+        # Validate action space for DDPG
+        validate_spaces(self, observation_space, action_space)
+
+        TorchPolicyV2.__init__(
+            self,
+            observation_space,
+            action_space,
+            config,
+            max_seq_len=config["model"]["max_seq_len"],
+        )
+
+        # TODO: Don't require users to call this manually.
+        self._initialize_loss_from_dummy_batch()
+
+        TargetNetworkMixin.__init__(self)
         TD3EvolveMixin.__init__(self)
 
     @override(TorchPolicyV2)
@@ -160,32 +152,35 @@ class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
         self.global_step += 1
 
     @override(TorchPolicyV2)
-    def extra_grad_process(
-        self, optimizer: torch.optim.Optimizer, loss: TensorType
-    ) -> Dict[str, TensorType]:
-        # Clip grads if configured.
-        grad_gnorm = 0
+    def action_distribution_fn(
+        self,
+        model: ModelV2,
+        *,
+        obs_batch: TensorType,
+        state_batches: TensorType,
+        is_training: bool = False,
+        **kwargs
+    ) -> Tuple[TensorType, type, List[TensorType]]:
+        model_out, _ = model(
+            SampleBatch(obs=obs_batch[SampleBatch.CUR_OBS], _is_training=is_training)
+        )
+        dist_inputs = model.get_policy_output(model_out)
 
-        for param_group in optimizer.param_groups:
-            params = list(
-                filter(lambda p: p.grad is not None, param_group["params"]))
-            if params:
-                grad_gnorm += torch.norm(torch.stack([
-                    torch.norm(p.grad.detach(), p=2)
-                    for p in params
-                ]), p=2).cpu().numpy()
+        distr_class = TorchDeterministic
 
-        if self.actor_optimizer == optimizer:
-            return {"actor_gnorm": grad_gnorm}
-        elif self.critic_optimizer == optimizer:
-            return {"critic_gnorm": grad_gnorm}
-        else:
-            return {}
+        return dist_inputs, distr_class, []  # []=state out
 
     @override(TorchPolicyV2)
-    def extra_compute_grad_fetches(self) -> Dict[str, Any]:
-        fetches = convert_to_numpy(concat_multi_gpu_td_errors(self))
-        return dict({LEARNER_STATS_KEY: {}}, **fetches)
+    def postprocess_trajectory(
+        self,
+        sample_batch: SampleBatch,
+        other_agent_batches: Optional[Dict[Any, SampleBatch]] = None,
+        episode: Optional[Episode] = None,
+    ) -> SampleBatch:
+        return postprocess_nstep_and_prio(
+            self, sample_batch, other_agent_batches, episode
+        )
+
 
     @override(TorchPolicyV2)
     def loss(
@@ -355,3 +350,43 @@ class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
 
         # Return two loss terms (corresponding to the two optimizers, we create).
         return [actor_loss, critic_loss]
+
+    @override(TorchPolicyV2)
+    def extra_grad_process(
+        self, optimizer: torch.optim.Optimizer, loss: TensorType
+    ) -> Dict[str, TensorType]:
+        # Clip grads if configured.
+        grad_gnorm = 0
+
+        for param_group in optimizer.param_groups:
+            params = list(
+                filter(lambda p: p.grad is not None, param_group["params"]))
+            if params:
+                grad_gnorm += torch.norm(torch.stack([
+                    torch.norm(p.grad.detach(), p=2)
+                    for p in params
+                ]), p=2).cpu().numpy()
+
+        if self.actor_optimizer == optimizer:
+            return {"actor_gnorm": grad_gnorm}
+        elif self.critic_optimizer == optimizer:
+            return {"critic_gnorm": grad_gnorm}
+        else:
+            return {}
+
+    @override(TorchPolicyV2)
+    def extra_compute_grad_fetches(self) -> Dict[str, Any]:
+        fetches = convert_to_numpy(concat_multi_gpu_td_errors(self))
+        return dict({LEARNER_STATS_KEY: {}}, **fetches)
+
+    @override(TorchPolicyV2)
+    def stats_fn(self, train_batch: SampleBatch) -> Dict[str, TensorType]:
+        q_t = torch.stack(self.get_tower_stats("q_t"))
+        stats = {
+            "actor_loss": torch.mean(torch.stack(self.get_tower_stats("actor_loss"))),
+            "critic_loss": torch.mean(torch.stack(self.get_tower_stats("critic_loss"))),
+            "mean_q": torch.mean(q_t),
+            "max_q": torch.max(q_t),
+            "min_q": torch.min(q_t),
+        }
+        return convert_to_numpy(stats)

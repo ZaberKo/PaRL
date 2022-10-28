@@ -4,28 +4,29 @@ import copy
 import ray
 
 from ray.rllib.policy.policy_template import build_policy_class
-from ray.rllib.algorithms.sac.sac_torch_policy import (
-    optimizer_fn,
-    ComputeTDErrorMixin,
-    TargetNetworkMixin
-)
 from ray.rllib.algorithms.sac.sac_tf_policy import (
     # build_sac_model,
     postprocess_trajectory,
     validate_spaces,
 )
-from ray.rllib.utils.torch_utils import apply_grad_clipping
 from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from parl.model.sac_model import SACTorchModel
-from .sac_policy_mixin import SACEvolveMixin, SACLearning
-from .policy_mixin import TorchPolicyMod
-from .action_dist import SquashedGaussian, SquashedGaussian2, SquashedGaussian3
+from .sac_policy_mixin import SACEvolveMixin, SACLearning, TargetNetworkMixin
+from .policy_mixin import (
+    TorchPolicyMod, 
+    concat_multi_gpu_td_errors
+)
+from .action_dist import (
+    SquashedGaussian, 
+    SquashedGaussian2, 
+    SquashedGaussian3
+)
 from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
-from parl.utils import disable_grad_ctx
+from parl.utils import disable_grad_ctx, disable_grad
 
 import gym
 from ray.rllib.policy import Policy, TorchPolicy
@@ -38,10 +39,59 @@ from ray.rllib.utils.typing import (
 )
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models import ModelV2
-from typing import List, Type, Union, Dict, Tuple, Optional
+from typing import List, Type, Dict, Tuple, Optional
 
 torch, nn = try_import_torch()
 F = nn.functional
+
+
+
+def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOptimizer]:
+    """Creates all necessary optimizers for SAC learning.
+
+    The 3 or 4 (twin_q=True) optimizers returned here correspond to the
+    number of loss terms returned by the loss function.
+
+    Args:
+        policy: The policy object to be trained.
+        config: The Algorithm's config dict.
+
+    Returns:
+        Tuple[LocalOptimizer]: The local optimizers to use for policy training.
+    """
+    policy.actor_optim = torch.optim.Adam(
+        params=policy.model.policy_variables(),
+        lr=config["optimization"]["actor_learning_rate"],
+        eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+    )
+
+    critic_split = len(policy.model.q_variables())
+    if config["twin_q"]:
+        critic_split //= 2
+
+    policy.critic_optims = [
+        torch.optim.Adam(
+            params=policy.model.q_variables()[:critic_split],
+            lr=config["optimization"]["critic_learning_rate"],
+            eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+        )
+    ]
+    if config["twin_q"]:
+        policy.critic_optims.append(
+            torch.optim.Adam(
+                params=policy.model.q_variables()[critic_split:],
+                lr=config["optimization"]["critic_learning_rate"],
+                eps=1e-7,  # to match tf.keras.optimizers.Adam's eps default
+            )
+        )
+    policy.alpha_optim = torch.optim.Adam(
+        params=[policy.model.log_alpha],
+        lr=config["optimization"]["entropy_learning_rate"],
+        eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+    )
+
+    return tuple([policy.actor_optim] + policy.critic_optims + [policy.alpha_optim])
+
 
 
 def optimizer_fn_no_alpha(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOptimizer]:
@@ -170,6 +220,8 @@ def build_sac_model_and_action_dist_fix(
         target_entropy=config["target_entropy"],
     )
 
+    disable_grad(policy.target_model)
+
     assert isinstance(policy.target_model, default_model_cls)
 
     action_dist_class = SquashedGaussian
@@ -210,33 +262,7 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
     return states
 
 
-def concat_multi_gpu_td_errors(
-    policy: Union["TorchPolicy", "TorchPolicyV2"]
-) -> Dict[str, TensorType]:
-    """Concatenates multi-GPU (per-tower) TD error tensors given TorchPolicy.
 
-    TD-errors are extracted from the TorchPolicy via its tower_stats property.
-
-    Args:
-        policy: The TorchPolicy to extract the TD-error values from.
-
-    Returns:
-        A dict mapping strings "td_error" and "mean_td_error" to the
-        corresponding concatenated and mean-reduced values.
-    """
-    td_error = torch.cat(
-        [
-            t.tower_stats.get("td_error", torch.tensor(
-                [0.0])).to(policy.device)
-            for t in policy.model_gpu_towers
-        ],
-        dim=0,
-    )
-    policy.td_error = td_error
-    return {
-        # "td_error": td_error,
-        "mean_td_error": torch.mean(td_error),
-    }
 
 
 def setup_late_mixins(
@@ -245,8 +271,6 @@ def setup_late_mixins(
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> None:
-    # SACMod.__init__(policy)
-    ComputeTDErrorMixin.__init__(policy)
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
 
@@ -368,8 +392,7 @@ SACPolicy = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin,
-            ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )
@@ -389,8 +412,7 @@ SACPolicy_FixedAlpha = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin,
-            ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )
@@ -408,8 +430,7 @@ SACPolicyTest = build_policy_class(
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[SACLearning, TargetNetworkMixin,
-            ComputeTDErrorMixin, SACEvolveMixin],
+    mixins=[SACLearning, TargetNetworkMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
     apply_gradients_fn=apply_gradients
 )

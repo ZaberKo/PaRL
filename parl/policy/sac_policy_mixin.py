@@ -10,6 +10,7 @@ from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
 
 from ray.rllib.evaluation import SampleBatch
+from ray.rllib.policy import TorchPolicy
 from ray.rllib.utils.typing import (
     GradInfoDict,
     ModelWeights,
@@ -45,7 +46,36 @@ class SACEvolveMixin:
         self.model.action_model.load_state_dict(state_dict, strict=False)
 
 
+class TargetNetworkMixin:
+    """Mixin class adding a method for (soft) target net(s) synchronizations.
 
+    - Adds the `update_target` method to the policy.
+      Calling `update_target` updates all target Q-networks' weights from their
+      respective "main" Q-metworks, based on tau (smooth, partial updating).
+    """
+
+    def __init__(self):
+        # Hard initial update from Q-net(s) to target Q-net(s).
+        self.update_target(tau=1.0)
+
+    def update_target(self, tau=None):
+        # Update_target_fn will be called periodically to copy Q network to
+        # target Q network, using (soft) tau-synching.
+        tau = tau or self.config.get("tau")
+
+        with torch.no_grad():
+            for p, p_target in zip (self.model.q_variables(), self.target_model.q_variables()):
+                p_target.mul_(1-tau)
+                p_target.add_(tau*p)
+            
+
+    # @override(TorchPolicy)
+    # def set_weights(self, weights):
+    #     # Makes sure that whenever we restore weights for this policy's
+    #     # model, we sync the target network (from the main model)
+    #     # at the same time.
+    #     TorchPolicy.set_weights(self, weights)
+    #     self.update_target()
 
 
 
