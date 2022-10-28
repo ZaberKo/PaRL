@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable, List
 import copy
 import numpy as np
 import ray
@@ -35,7 +35,7 @@ def clone_numpy_weights(x: TensorStructType,):
     return tree.map_structure(mapping, x)
 
 
-def timer_to_ms(timer:_Timer):
+def timer_to_ms(timer: _Timer):
     return round(1000 * timer.mean, 3)
 
 
@@ -51,6 +51,8 @@ def compute_ranks(x):
     return ranks
 
 # Note: use from_config() instead
+
+
 def import_policy_class(policy_name) -> Policy:
     # read policy_class from config
     tmp = policy_name.rsplit('.', 1)
@@ -59,3 +61,13 @@ def import_policy_class(policy_name) -> Policy:
         return getattr(importlib.import_module(module), name)
     else:
         raise ValueError('`policy_name` is incorrect')
+
+
+def disable_grad(params: list[torch.Tensor]):
+    for param in params:
+        param.requires_grad=False
+        
+def enable_grad(params: list[torch.Tensor]):
+    for param in params:
+        param.requires_grad=False
+

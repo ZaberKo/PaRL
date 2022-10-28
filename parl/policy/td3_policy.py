@@ -23,10 +23,10 @@ from ray.rllib.utils.framework import try_import_torch
 from typing import List, Type, Union, Dict, Tuple, Optional, Any
 from ray.rllib.policy import Policy, TorchPolicy
 from ray.rllib.utils.typing import (
+    ModelGradients,
     TensorType,
     AlgorithmConfigDict,
-    LocalOptimizer,
-    ModelInputDict
+    LocalOptimizer
 )
 from ray.rllib.algorithms.dqn.dqn_tf_policy import (
     PRIO_WEIGHTS,
@@ -68,39 +68,6 @@ def concat_multi_gpu_td_errors(
         "mean_td_error": torch.mean(td_error),
     }
 
-
-def record_grads(
-    policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
-) -> Dict[str, TensorType]:
-    """Applies gradient clipping to already computed grads inside `optimizer`.
-
-    Args:
-        policy: The TorchPolicy, which calculated `loss`.
-        optimizer: A local torch optimizer object.
-        loss: The torch loss tensor.
-
-    Returns:
-        An info dict containing the "grad_norm" key and the resulting clipped
-        gradients.
-    """
-    grad_gnorm = 0
-
-    for param_group in optimizer.param_groups:
-        params = list(
-            filter(lambda p: p.grad is not None, param_group["params"]))
-        if params:
-            grad_gnorm += torch.norm(torch.stack([
-                torch.norm(p.grad.detach(), p=2)
-                for p in params
-            ]), p=2).cpu().numpy()
-
-    if policy._actor_optimizer == optimizer:
-        return {"actor_gnorm": grad_gnorm}
-    elif policy._critic_optimizer == optimizer:
-        return {"critic_gnorm": grad_gnorm}
-    else:
-        return {}
-
 def make_ddpg_models(policy: Policy) -> ModelV2:
     num_outputs = int(np.product(policy.observation_space.shape))
     model = ModelCatalog.get_model_v2(
@@ -141,6 +108,7 @@ def make_ddpg_models(policy: Policy) -> ModelV2:
 
     return model
 
+
 class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
     def __init__(
         self,
@@ -162,11 +130,57 @@ class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
         return model, distr_class
 
     @override(TorchPolicyV2)
+    def optimizer(
+        self,
+    ) -> List["torch.optim.Optimizer"]:
+        """Create separate optimizers for actor & critic losses."""
+
+        # Set epsilons to match tf.keras.optimizers.Adam's epsilon default.
+        self.actor_optimizer = torch.optim.Adam(
+            params=self.model.policy_variables(), lr=self.config["actor_lr"], eps=1e-7
+        )
+
+        self.critic_optimizer = torch.optim.Adam(
+            params=self.model.q_variables(), lr=self.config["critic_lr"], eps=1e-7
+        )
+
+        # Return them in the same order as the respective loss terms are returned.
+        return [self.actor_optimizer, self.critic_optimizer]
+
+    @override(TorchPolicyV2)
+    def apply_gradients(self, gradients: ModelGradients) -> None:
+        # For policy gradient, update policy net one time v.s.
+        # update critic net `policy_delay` time(s).
+        if self.global_step % self.config["policy_delay"] == 0:
+            self.actor_optimizer.step()
+
+        self.critic_optimizer.step()
+
+        # Increment global step & apply ops.
+        self.global_step += 1
+
+    @override(TorchPolicyV2)
     def extra_grad_process(
         self, optimizer: torch.optim.Optimizer, loss: TensorType
     ) -> Dict[str, TensorType]:
         # Clip grads if configured.
-        return record_grads(self, optimizer, loss)
+        grad_gnorm = 0
+
+        for param_group in optimizer.param_groups:
+            params = list(
+                filter(lambda p: p.grad is not None, param_group["params"]))
+            if params:
+                grad_gnorm += torch.norm(torch.stack([
+                    torch.norm(p.grad.detach(), p=2)
+                    for p in params
+                ]), p=2).cpu().numpy()
+
+        if self.actor_optimizer == optimizer:
+            return {"actor_gnorm": grad_gnorm}
+        elif self.critic_optimizer == optimizer:
+            return {"critic_gnorm": grad_gnorm}
+        else:
+            return {}
 
     @override(TorchPolicyV2)
     def extra_compute_grad_fetches(self) -> Dict[str, Any]:
@@ -248,16 +262,18 @@ class TD3Policy(DDPGTorchPolicy, TD3EvolveMixin):
         q_t = model.get_q_values(model_out_t, train_batch[SampleBatch.ACTIONS])
         q_t_selected = torch.squeeze(q_t, dim=-1)  # [B,1]->[B]
 
+        if twin_q:
+            twin_q_t = model.get_twin_q_values(
+                model_out_t, train_batch[SampleBatch.ACTIONS]
+            )
+            twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
+
         with torch.no_grad():
             # Target q-net(s) evaluation.
             q_tp1 = target_model.get_q_values(
                 target_model_out_tp1, policy_tp1_smoothed)
 
             if twin_q:
-                twin_q_t = model.get_twin_q_values(
-                    model_out_t, train_batch[SampleBatch.ACTIONS]
-                )
-                twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
                 twin_q_tp1 = target_model.get_twin_q_values(
                     target_model_out_tp1, policy_tp1_smoothed
                 )
