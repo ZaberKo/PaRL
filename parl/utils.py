@@ -76,7 +76,7 @@ def enable_grad(params: list[torch.Tensor]):
 
 @contextlib.contextmanager
 def disable_grad_ctx(params: list[torch.Tensor]):
-    prev_states=[p.required_grad for p in params]
+    prev_states=[p.requires_grad for p in params]
     try:
         for param in params:
             param.requires_grad = False
