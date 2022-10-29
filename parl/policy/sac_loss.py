@@ -231,10 +231,10 @@ def actor_critic_loss_no_alpha(
             of loss tensors.
     """
 
-    critic_loss = calc_critic_loss(policy, model, dist_class, train_batch)
+    critic_losses = calc_critic_loss(policy, model, dist_class, train_batch)
 
     with disable_grad_ctx(model.q_variables()):
         actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
 
     # Return all loss terms corresponding to our optimizers.
-    return tuple([actor_loss] + critic_loss)
+    return tuple([actor_loss] + critic_losses)
