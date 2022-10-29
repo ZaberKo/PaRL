@@ -15,7 +15,12 @@ from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from parl.model.sac_model import SACTorchModel
-from .sac_policy_mixin import SACEvolveMixin, SACLearning, TargetNetworkMixin
+from .sac_policy_mixin import (
+    SACEvolveMixin, 
+    SACLearning, 
+    TargetNetworkMixin,
+    TargetNetworkMixin2
+)
 from .policy_mixin import (
     TorchPolicyMod, 
     concat_multi_gpu_td_errors
@@ -220,7 +225,7 @@ def build_sac_model_and_action_dist_fix(
         target_entropy=config["target_entropy"],
     )
 
-    disable_grad(policy.target_model)
+    disable_grad(policy.target_model.parameters())
 
     assert isinstance(policy.target_model, default_model_cls)
 

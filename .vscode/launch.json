@@ -35,7 +35,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"}
+            "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
+            "args": ["--env", "Hopper-v3"]
         }
     ]
 }

@@ -5,6 +5,7 @@ from .sac_loss import (
     calc_alpha_loss
 )
 
+from parl.utils import disable_grad_ctx
 
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
@@ -64,7 +65,10 @@ class TargetNetworkMixin:
         tau = tau or self.config.get("tau")
 
         with torch.no_grad():
-            for p, p_target in zip (self.model.q_variables(), self.target_model.q_variables()):
+            for p, p_target in zip (
+                self.model.q_variables(),
+                self.target_model.q_variables()
+            ):
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)
             
@@ -77,7 +81,36 @@ class TargetNetworkMixin:
     #     TorchPolicy.set_weights(self, weights)
     #     self.update_target()
 
+class TargetNetworkMixin2:
+    """Mixin class adding a method for (soft) target net(s) synchronizations.
 
+    - Adds the `update_target` method to the policy.
+      Calling `update_target` updates all target Q-networks' weights from their
+      respective "main" Q-metworks, based on tau (smooth, partial updating).
+    """
+
+    def __init__(self):
+        # Hard initial update from Q-net(s) to target Q-net(s).
+        self.update_target(tau=1.0)
+
+    def update_target(self, tau=None):
+        # Update_target_fn will be called periodically to copy Q network to
+        # target Q network, using (soft) tau-synching.
+        tau = tau or self.config.get("tau")
+
+        with torch.no_grad():
+            for p, p_target in zip (
+                self.model.q_variables(),
+                self.target_model.q_variables()
+            ):
+                p_target.mul_(1-tau)
+                p_target.add_(tau*p)
+            for p, p_target in zip (
+                self.model.policy_variables(),
+                self.target_model.policy_variables()
+            ):
+                p_target.mul_(1-tau)
+                p_target.add_(tau*p)
 
 
 
@@ -132,11 +165,12 @@ class SACLearning:
             critic_optim.step()
             _name="twin_critic_gnorm"
 
-        actor_loss = calc_actor_loss(self, self.model, self.dist_class, postprocessed_batch)
-        self.actor_optim.zero_grad()
-        actor_loss.backward()
-        grad_info["actor_gnorm"]=calc_grad_norm(self.actor_optim)
-        self.actor_optim.step()
+        with disable_grad_ctx(self.model.q_variables()):
+            actor_loss = calc_actor_loss(self, self.model, self.dist_class, postprocessed_batch)
+            self.actor_optim.zero_grad()
+            actor_loss.backward()
+            grad_info["actor_gnorm"]=calc_grad_norm(self.actor_optim)
+            self.actor_optim.step()
 
         if hasattr(self, "alpha_optim"):
             alpha_loss = calc_alpha_loss(self, self.model, self.dist_class, postprocessed_batch)
