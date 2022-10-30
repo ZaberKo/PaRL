@@ -1,4 +1,6 @@
+import numpy as np
 import torch
+import torch.nn as nn
 from .sac_loss import (
     calc_critic_loss,
     calc_actor_loss,
@@ -64,10 +66,13 @@ class TargetNetworkMixin:
         # target Q network, using (soft) tau-synching.
         tau = tau or self.config.get("tau")
 
+        model=self.model
+        target_model=self.target_models[self.model]
+
         with torch.no_grad():
-            for p, p_target in zip (
-                self.model.q_variables(),
-                self.target_model.q_variables()
+            for p, p_target in zip(
+                model.q_variables(),
+                target_model.q_variables()
             ):
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)
@@ -98,16 +103,20 @@ class TargetNetworkMixin2:
         # target Q network, using (soft) tau-synching.
         tau = tau or self.config.get("tau")
 
+        model=self.model
+        target_model=self.target_models[self.model]
+
         with torch.no_grad():
             for p, p_target in zip (
-                self.model.q_variables(),
-                self.target_model.q_variables()
+                model.q_variables(),
+                target_model.q_variables()
             ):
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)
+
             for p, p_target in zip (
-                self.model.policy_variables(),
-                self.target_model.policy_variables()
+                model.policy_variables(),
+                target_model.policy_variables()
             ):
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)
@@ -115,17 +124,11 @@ class TargetNetworkMixin2:
 
 
 
-def calc_grad_norm(optimizer):
+def clip_and_record_grad_norm(optimizer, clip_value=np.inf):
     grad_gnorm = 0
 
     for param_group in optimizer.param_groups:
-        params = list(
-            filter(lambda p: p.grad is not None, param_group["params"]))
-        if params:
-            grad_gnorm += torch.norm(torch.stack([
-                torch.norm(p.grad.detach(), p=2)
-                for p in params
-            ]), p=2).cpu().numpy()
+        grad_gnorm+=nn.utils.clip_grad_norm_(param_group["params"], clip_value)
 
     return grad_gnorm
 
@@ -134,6 +137,56 @@ class SACLearning:
     """
         Define new update pattern
     """
+    def __init__(self):
+        self.global_step = 0
+
+    def compute_grad_and_apply(self, train_batch):
+        grad_info = {}
+        # calc gradient and updates
+        optim_config = self.config["optimization"]
+
+        # ========= critic update ============
+        critic_losses = calc_critic_loss(self, self.model, self.dist_class, train_batch)
+        opt_name=["critic_gnorm","twin_critic_gnorm"]
+        for critic_loss, critic_optim, _name in zip(critic_losses, self.critic_optims, opt_name):
+            critic_optim.zero_grad()
+            critic_loss.backward()
+            grad_info[_name]=clip_and_record_grad_norm(
+                critic_optim,
+                clip_value= optim_config.get("critic_grad_clip", np.inf)
+                )
+            critic_optim.step()
+
+        # ============ actor update ===============
+        if self.global_step % self.config.get("policy_delay", 1) == 0:
+            with disable_grad_ctx(self.model.q_variables()):
+                actor_loss = calc_actor_loss(self, self.model, self.dist_class, train_batch)
+                self.actor_optim.zero_grad()
+                actor_loss.backward()
+                grad_info["actor_gnorm"]=clip_and_record_grad_norm(
+                    self.actor_optim,
+                    clip_value= optim_config.get("actor_grad_clip", np.inf)
+                    )
+                self.actor_optim.step()
+
+        # ============== alpha update ===============
+        if hasattr(self, "alpha_optim"):
+            alpha_loss = calc_alpha_loss(self, self.model, self.dist_class, train_batch)
+            self.alpha_optim.zero_grad()
+            alpha_loss.backward()
+            grad_info["alpha_gnorm"]=clip_and_record_grad_norm(
+                self.alpha_optim,
+                clip_value = optim_config.get("alpha_grad_clip", np.inf)
+                )
+            self.alpha_optim.step()
+
+        self.global_step += 1
+
+        # for TorchPolicyV2
+        if hasattr(self, "stats_fn"):
+            grad_info.update(self.stats_fn(train_batch))
+        else:
+            grad_info.update(self.extra_grad_info(train_batch))
 
     def learn_on_batch(self, postprocessed_batch: SampleBatch) -> Dict[str, TensorType]:
 
@@ -141,9 +194,9 @@ class SACLearning:
         if self.model:
             self.model.train()
         # Callback handling.
-        learn_stats = {}
+        custom_metrics = {}
         self.callbacks.on_learn_on_batch(
-            policy=self, train_batch=postprocessed_batch, result=learn_stats
+            policy=self, train_batch=postprocessed_batch, result=custom_metrics
         )
 
         # grads, fetches = self.compute_gradients(postprocessed_batch)
@@ -154,36 +207,7 @@ class SACLearning:
         postprocessed_batch.set_training(True)
         self._lazy_tensor_dict(postprocessed_batch, device=self.devices[0])
 
-        grad_info = {"allreduce_latency": 0.0}
-        # calc gradient and updates
-        critic_losses = calc_critic_loss(self, self.model, self.dist_class, postprocessed_batch)
-        _name="critic_gnorm"
-        for critic_loss, critic_optim in zip(critic_losses, self.critic_optims):
-            critic_optim.zero_grad()
-            critic_loss.backward()
-            grad_info[_name]=calc_grad_norm(critic_optim)
-            critic_optim.step()
-            _name="twin_critic_gnorm"
-
-        with disable_grad_ctx(self.model.q_variables()):
-            actor_loss = calc_actor_loss(self, self.model, self.dist_class, postprocessed_batch)
-            self.actor_optim.zero_grad()
-            actor_loss.backward()
-            grad_info["actor_gnorm"]=calc_grad_norm(self.actor_optim)
-            self.actor_optim.step()
-
-        if hasattr(self, "alpha_optim"):
-            alpha_loss = calc_alpha_loss(self, self.model, self.dist_class, postprocessed_batch)
-            self.alpha_optim.zero_grad()
-            alpha_loss.backward()
-            grad_info["alpha_gnorm"]=calc_grad_norm(self.alpha_optim)
-            self.alpha_optim.step()
-
-        # for TorchPolicyV2
-        if hasattr(self, "stats_fn"):
-            grad_info.update(self.stats_fn(postprocessed_batch))
-        else:
-            grad_info.update(self.extra_grad_info(postprocessed_batch))
+        grad_info = self.compute_grad_and_apply(postprocessed_batch)
 
         fetches = self.extra_compute_grad_fetches()
         fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
@@ -193,11 +217,62 @@ class SACLearning:
 
         fetches.update(
             {
-                "custom_metrics": learn_stats,
+                "custom_metrics": custom_metrics,
                 NUM_AGENT_STEPS_TRAINED: postprocessed_batch.count,
             }
         )
 
         return fetches
+
+    def learn_on_loaded_batch(self: TorchPolicy, offset: int = 0, buffer_index: int = 0):
+        if not self._loaded_batches[buffer_index]:
+            raise ValueError(
+                "Must call Policy.load_batch_into_buffer() before "
+                "Policy.learn_on_loaded_batch()!"
+            )
+
+        assert len(self.devices) == 1
+
+        # Get the correct slice of the already loaded batch to use,
+        # based on offset and batch size.
+        device_batch_size = self.config.get(
+            "sgd_minibatch_size", self.config["train_batch_size"]
+        ) // len(self.devices)
+
+        # Set Model to train mode.
+        if self.model:
+            self.model.train()
+
+        # only fetch gpu0 batch
+        if device_batch_size >= sum(len(s) for s in self._loaded_batches[buffer_index]):
+            device_batch = self._loaded_batches[buffer_index][0]
+        else:
+            device_batch = self._loaded_batches[buffer_index][0][offset: offset + device_batch_size]
+
+        # Callback handling.
+        batch_fetches = {}
+        custom_metrics = {}
+        self.callbacks.on_learn_on_batch(
+            policy=self, train_batch=device_batch, result=custom_metrics
+        )
+
+        # Do the (maybe parallelized) gradient calculation step.
+        grad_info = self.compute_grad_and_apply(device_batch)
+
+
+        fetches = self.extra_compute_grad_fetches()
+        fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
+
+        if self.model:
+            fetches["model"] = self.model.metrics()
+
+        fetches.update(
+            {
+                "custom_metrics": custom_metrics,
+                NUM_AGENT_STEPS_TRAINED: device_batch.count,
+            }
+        )
+
+        return batch_fetches
 
  

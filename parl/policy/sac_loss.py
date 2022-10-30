@@ -203,38 +203,41 @@ def actor_critic_loss_fix(
 
     with disable_grad_ctx(model.q_variables()):
         actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
-        
+    
+    losses = [actor_loss] + critic_losses
 
-    alpha_loss = calc_alpha_loss(policy, model, dist_class, train_batch)
-
-    # Return all loss terms corresponding to our optimizers.
-    return tuple([actor_loss] + critic_losses + [alpha_loss])
-
-
-# disable alpha tuning and disable priority replay
-def actor_critic_loss_no_alpha(
-    policy: Policy,
-    model: ModelV2,
-    dist_class: Type[TorchDistributionWrapper],
-    train_batch: SampleBatch,
-) -> Union[TensorType, List[TensorType]]:
-    """Constructs the loss for the Soft Actor Critic.
-
-    Args:
-        policy: The Policy to calculate the loss for.
-        model (ModelV2): The Model to calculate the loss for.
-        dist_class (Type[TorchDistributionWrapper]: The action distr. class.
-        train_batch: The training data.
-
-    Returns:
-        Union[TensorType, List[TensorType]]: A single loss tensor or a list
-            of loss tensors.
-    """
-
-    critic_losses = calc_critic_loss(policy, model, dist_class, train_batch)
-
-    with disable_grad_ctx(model.q_variables()):
-        actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
+    if policy.config["tune_alpha"]:
+        alpha_loss = calc_alpha_loss(policy, model, dist_class, train_batch)
+        losses.append(alpha_loss)
 
     # Return all loss terms corresponding to our optimizers.
-    return tuple([actor_loss] + critic_losses)
+    return tuple(losses)
+
+
+# # disable alpha tuning and disable priority replay
+# def actor_critic_loss_no_alpha(
+#     policy: Policy,
+#     model: ModelV2,
+#     dist_class: Type[TorchDistributionWrapper],
+#     train_batch: SampleBatch,
+# ) -> Union[TensorType, List[TensorType]]:
+#     """Constructs the loss for the Soft Actor Critic.
+
+#     Args:
+#         policy: The Policy to calculate the loss for.
+#         model (ModelV2): The Model to calculate the loss for.
+#         dist_class (Type[TorchDistributionWrapper]: The action distr. class.
+#         train_batch: The training data.
+
+#     Returns:
+#         Union[TensorType, List[TensorType]]: A single loss tensor or a list
+#             of loss tensors.
+#     """
+
+#     critic_losses = calc_critic_loss(policy, model, dist_class, train_batch)
+
+#     with disable_grad_ctx(model.q_variables()):
+#         actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
+
+#     # Return all loss terms corresponding to our optimizers.
+#     return tuple([actor_loss] + critic_losses)

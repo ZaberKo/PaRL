@@ -6,7 +6,6 @@ import ray
 import torch
 
 from parl.sac import SAC_Parallel, SACConfigMod
-from parl.policy import SACPolicy, SACPolicy_FixedAlpha
 from parl.env_config import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
@@ -18,20 +17,6 @@ from baseline.mujoco_sac_baseline import Config
 import argparse
 from dataclasses import dataclass
 from typing import Union
-
-
-class SAC_FixAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy_FixedAlpha
-
-
-class SAC_TuneAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy
-
-
 
 
 def main(_config):
@@ -66,6 +51,7 @@ def main(_config):
     )
     sac_config = sac_config.training(
         # grad_clip=config.grad_clip,
+        tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
@@ -73,7 +59,7 @@ def main(_config):
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
-            "learning_starts": 10000,
+            "learning_starts": 0,
         },
         optimization={
             "actor_learning_rate": 3e-4,
@@ -121,9 +107,8 @@ def main(_config):
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
     # )
     sac_config = sac_config.to_dict()
-    num_cpus, num_gpus = config.resources()
 
-    
+    num_cpus, num_gpus = config.resources()
 
     ray.init(
         num_cpus=num_cpus,
@@ -132,9 +117,7 @@ def main(_config):
         include_dashboard=False
     )
 
-
-    SAC=SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha
-    trainer=SAC(config=sac_config)
+    trainer = SAC_Parallel(config=sac_config)
 
     from tqdm import trange
     from ray.rllib.utils.debug import summarize
@@ -145,7 +128,6 @@ def main(_config):
         del res["hist_stats"]
         print(summarize(res))
         print("+"*20)
-
 
     time.sleep(20)
 
@@ -162,5 +144,5 @@ if __name__ == "__main__":
         config = yaml.load(f)
 
     if args.env:
-        config["env"]=args.env
+        config["env"] = args.env
     main(config)

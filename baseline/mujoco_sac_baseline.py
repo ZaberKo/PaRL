@@ -8,7 +8,6 @@ import torch
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 from parl.sac import SAC_Parallel, SACConfigMod
-from parl.policy import SACPolicy, SACPolicy_FixedAlpha
 from parl.env_config import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
@@ -19,17 +18,6 @@ import argparse
 from dataclasses import dataclass
 from typing import Union
 
-
-class SAC_FixAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy_FixedAlpha
-
-
-class SAC_TuneAlpha(SAC_Parallel):
-    def get_default_policy_class(
-            self, config):
-        return SACPolicy
 
 
 @dataclass
@@ -99,6 +87,7 @@ def main(_config):
     )
     sac_config = sac_config.training(
         # grad_clip=config.grad_clip,
+        tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
@@ -165,7 +154,7 @@ def main(_config):
     )
 
     tuner = Tuner(
-        SAC_TuneAlpha if config.autotune_alpha else SAC_FixAlpha,
+        SAC_Parallel,
         param_space=sac_config,
         tune_config=TuneConfig(
             num_samples=config.num_tests

@@ -1,5 +1,3 @@
-from itertools import chain
-
 import ray
 from ray.rllib.policy.sample_batch import concat_samples
 from ray.rllib.evaluation.rollout_worker import RolloutWorker

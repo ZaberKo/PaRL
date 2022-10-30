@@ -118,7 +118,7 @@ class SACTorchModel(TorchModelV2, nn.Module):
             self.twin_q_net = None
 
         self.log_alpha = nn.Parameter(torch.tensor(
-            np.log(initial_alpha)), requires_grad=True)
+            np.log(initial_alpha)), dtype=torch.float32, requires_grad=True)
 
         # Auto-calculate the target entropy.
         if target_entropy is None or target_entropy == "auto":
@@ -132,7 +132,7 @@ class SACTorchModel(TorchModelV2, nn.Module):
                 target_entropy = -np.prod(action_space.shape)
 
         self.target_entropy = nn.Parameter(
-            torch.tensor(target_entropy), requires_grad=False)
+            torch.tensor(target_entropy), dtype=torch.float32, requires_grad=False)
 
     @override(TorchModelV2)
     def forward(
@@ -170,12 +170,14 @@ class SACTorchModel(TorchModelV2, nn.Module):
         # )
         hiddens = list(model_config.get("fcnet_hiddens", []))
         activation = model_config.get("fcnet_activation")
+        add_layer_norm = model_config.get("add_layer_norm", False)
 
         model = FullyConnectedNetwork(
             num_inputs=num_inputs,
             num_outputs=num_outputs,
             hiddens=hiddens,
-            activation=activation
+            activation=activation,
+            add_layer_norm=add_layer_norm
         )
         return model
 
@@ -197,7 +199,8 @@ class SACTorchModel(TorchModelV2, nn.Module):
             num_inputs=num_inputs,
             num_outputs=num_outputs,
             hiddens=hiddens,
-            activation=activation
+            activation=activation,
+            add_layer_norm=False
         )
         return model
 

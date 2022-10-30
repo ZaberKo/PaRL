@@ -2,40 +2,38 @@ import numpy as np
 import tree
 import copy
 import ray
+import gym
 
 from ray.rllib.policy.policy_template import build_policy_class
-from ray.rllib.algorithms.sac.sac_tf_policy import (
-    # build_sac_model,
-    postprocess_trajectory,
-    validate_spaces,
-)
 from ray.rllib.models import ModelCatalog, MODEL_DEFAULTS
-
+from ray.rllib.algorithms.dqn.dqn_tf_policy import (
+    postprocess_nstep_and_prio,
+    PRIO_WEIGHTS,
+)
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
 from parl.model.sac_model import SACTorchModel
 from .sac_policy_mixin import (
-    SACEvolveMixin, 
-    SACLearning, 
+    SACEvolveMixin,
+    SACLearning,
     TargetNetworkMixin,
     TargetNetworkMixin2
 )
 from .policy_mixin import (
-    TorchPolicyMod, 
+    TorchPolicyMod,
     concat_multi_gpu_td_errors
 )
 from .action_dist import (
-    SquashedGaussian, 
-    SquashedGaussian2, 
+    SquashedGaussian,
+    SquashedGaussian2,
     SquashedGaussian3
 )
-from .sac_loss import actor_critic_loss_fix, actor_critic_loss_no_alpha
-from parl.utils import disable_grad_ctx, disable_grad
+from .sac_loss import actor_critic_loss_fix
+from parl.utils import disable_grad
 
-import gym
-from ray.rllib.policy import Policy, TorchPolicy
-from ray.rllib.policy.torch_policy import _directStepOptimizerSingleton
+
+from ray.rllib.utils.error import UnsupportedSpaceException
 from ray.rllib.utils.typing import (
     TensorType,
     AlgorithmConfigDict,
@@ -44,11 +42,13 @@ from ray.rllib.utils.typing import (
 )
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models import ModelV2
+from ray.rllib.policy import Policy
+from gym.spaces import Box, Discrete
+from ray.rllib.utils.spaces.simplex import Simplex
 from typing import List, Type, Dict, Tuple, Optional
 
 torch, nn = try_import_torch()
 F = nn.functional
-
 
 
 def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOptimizer]:
@@ -89,61 +89,18 @@ def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOpti
                 eps=1e-7,  # to match tf.keras.optimizers.Adam's eps default
             )
         )
-    policy.alpha_optim = torch.optim.Adam(
-        params=[policy.model.log_alpha],
-        lr=config["optimization"]["entropy_learning_rate"],
-        eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
-    )
 
-    return tuple([policy.actor_optim] + policy.critic_optims + [policy.alpha_optim])
+    optimizers = [policy.actor_optim]+policy.critic_optims
 
-
-
-def optimizer_fn_no_alpha(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOptimizer]:
-    """Creates all necessary optimizers for SAC learning.
-
-    The 3 or 4 (twin_q=True) optimizers returned here correspond to the
-    number of loss terms returned by the loss function.
-
-    Args:
-        policy: The policy object to be trained.
-        config: The Algorithm's config dict.
-
-    Returns:
-        Tuple[LocalOptimizer]: The local optimizers to use for policy training.
-    """
-    policy.actor_optim = torch.optim.Adam(
-        params=policy.model.policy_variables(),
-        lr=config["optimization"]["actor_learning_rate"],
-        eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
-    )
-
-    critic_split = len(policy.model.q_variables())
-    if config["twin_q"]:
-        critic_split //= 2
-
-    policy.critic_optims = [
-        torch.optim.Adam(
-            params=policy.model.q_variables()[:critic_split],
-            lr=config["optimization"]["critic_learning_rate"],
+    if config["tune_alpha"]:
+        policy.alpha_optim = torch.optim.Adam(
+            params=[policy.model.log_alpha],
+            lr=config["optimization"]["entropy_learning_rate"],
             eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
         )
-    ]
-    if config["twin_q"]:
-        policy.critic_optims.append(
-            torch.optim.Adam(
-                params=policy.model.q_variables()[critic_split:],
-                lr=config["optimization"]["critic_learning_rate"],
-                eps=1e-7,  # to match tf.keras.optimizers.Adam's eps default
-            )
-        )
-    # policy.alpha_optim = torch.optim.Adam(
-    #     params=[policy.model.log_alpha],
-    #     lr=config["optimization"]["entropy_learning_rate"],
-    #     eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
-    # )
+        optimizers.append(policy.alpha_optim)
 
-    return tuple([policy.actor_optim] + policy.critic_optims)
+    return tuple(optimizers)
 
 
 def action_distribution_fn_fix(
@@ -203,6 +160,9 @@ def build_sac_model_and_action_dist_fix(
         initial_alpha=config["initial_alpha"],
         target_entropy=config["target_entropy"],
     )
+
+    if not config["tune_alpha"]:
+        disable_grad([model.log_alpha])
 
     assert isinstance(model, default_model_cls)
 
@@ -266,167 +226,104 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
 
     return states
 
-
-
-
-
-def setup_late_mixins(
+def validate_spaces(
     policy: Policy,
-    obs_space: gym.spaces.Space,
+    observation_space: gym.spaces.Space,
     action_space: gym.spaces.Space,
     config: AlgorithmConfigDict,
 ) -> None:
+    # Only support single Box or single Discrete spaces.
+    if not isinstance(action_space, (Box, Discrete, Simplex)):
+        raise UnsupportedSpaceException(
+            "Action space ({}) of {} is not supported for "
+            "SAC. Must be [Box|Discrete|Simplex].".format(action_space, policy)
+        )
+    # If Box, make sure it's a 1D vector space.
+    elif isinstance(action_space, (Box, Simplex)) and len(action_space.shape) > 1:
+        raise UnsupportedSpaceException(
+            "Action space ({}) of {} has multiple dimensions "
+            "{}. ".format(action_space, policy, action_space.shape)
+            + "Consider reshaping this into a single dimension, "
+            "using a Tuple action space, or the multi-agent API."
+        )
+
+def postprocess_trajectory(
+    policy: Policy,
+    sample_batch: SampleBatch,
+    *args
+) -> SampleBatch:
+    return postprocess_nstep_and_prio(policy, sample_batch)
+
+def setup_late_mixins(
+    policy: Policy,
+    *args
+) -> None:
+    SACLearning.__init__(policy)
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
 
-    # used in apply_gradients()
-    policy.global_step = 0
+
+# SACPolicy = build_policy_class(
+#     name="SACTorchPolicy",
+#     framework="torch",
+#     loss_fn=actor_critic_loss_fix,
+#     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
+#     stats_fn=stats,
+#     postprocess_fn=postprocess_trajectory,
+#     extra_grad_process_fn=apply_and_record_grad_clipping,
+#     optimizer_fn=optimizer_fn,
+#     validate_spaces=validate_spaces,
+#     before_loss_init=setup_late_mixins,
+#     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
+#     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
+#     mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
+#     action_distribution_fn=action_distribution_fn_fix,
+#     apply_gradients_fn=apply_gradients
+# )
 
 
-def record_grads(
-    policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
-) -> Dict[str, TensorType]:
-    """Applies gradient clipping to already computed grads inside `optimizer`.
-
-    Args:
-        policy: The TorchPolicy, which calculated `loss`.
-        optimizer: A local torch optimizer object.
-        loss: The torch loss tensor.
-
-    Returns:
-        An info dict containing the "grad_norm" key and the resulting clipped
-        gradients.
-    """
-    grad_gnorm = 0
-
-    for param_group in optimizer.param_groups:
-        params = list(
-            filter(lambda p: p.grad is not None, param_group["params"]))
-        if params:
-            grad_gnorm += torch.norm(torch.stack([
-                torch.norm(p.grad.detach(), p=2)
-                for p in params
-            ]), p=2).cpu().numpy()
-
-    if policy.actor_optim == optimizer:
-        return {"actor_gnorm": grad_gnorm}
-    elif policy.critic_optims[0] == optimizer:
-        return {"critic_gnorm": grad_gnorm}
-    elif policy.critic_optims[1] == optimizer:
-        return {"twin_critic_gnorm": grad_gnorm}
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
-        return {"alpha_gnorm": grad_gnorm}
-    else:
-        return {}
+# SACPolicy_FixedAlpha = build_policy_class(
+#     name="SACTorchPolicy",
+#     framework="torch",
+#     loss_fn=actor_critic_loss_no_alpha,
+#     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
+#     stats_fn=stats,
+#     postprocess_fn=postprocess_trajectory,
+#     # extra_grad_process_fn=apply_grad_clipping,
+#     extra_grad_process_fn=apply_and_record_grad_clipping,
+#     optimizer_fn=optimizer_fn_no_alpha,
+#     validate_spaces=validate_spaces,
+#     before_loss_init=setup_late_mixins,
+#     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
+#     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
+#     mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
+#     action_distribution_fn=action_distribution_fn_fix,
+#     apply_gradients_fn=apply_gradients
+# )
 
 
-def apply_and_record_grad_clipping(
-    policy: "TorchPolicy", optimizer: LocalOptimizer, loss: TensorType
-) -> Dict[str, TensorType]:
-    optim_config = policy.config["optimization"]
-    clip_value = np.inf
-    key = None
-
-    if policy.actor_optim == optimizer:
-        key = "actor_gnorm"
-        clip_value = optim_config.get("actor_grad_clip", np.inf)
-    elif policy.critic_optims[0] == optimizer:
-        key = "critic_gnorm"
-        clip_value = optim_config.get("critic_grad_clip", np.inf)
-    elif policy.critic_optims[1] == optimizer:
-        key = "twin_critic_gnorm"
-        clip_value = optim_config.get("critic_grad_clip", np.inf)
-    elif hasattr(policy, "alpha_optim") and policy.alpha_optim == optimizer:
-        key = "alpha_gnorm"
-        clip_value = optim_config.get("alpha_grad_clip", np.inf)
-    if clip_value is None:
-        clip_value = np.inf
-    grad_gnorm = 0
-
-    for param_group in optimizer.param_groups:
-        # Make sure we only pass params with grad != None into torch
-        # clip_grad_norm_. Would fail otherwise.
-        params = list(
-            filter(lambda p: p.grad is not None, param_group["params"]))
-        if params:
-            # PyTorch clips gradients inplace and returns the norm before clipping
-            # We therefore need to compute grad_gnorm further down (fixes #4965)
-            global_norm = nn.utils.clip_grad_norm_(params, clip_value)
-
-            if isinstance(global_norm, torch.Tensor):
-                global_norm = global_norm.cpu().numpy()
-
-            grad_gnorm += global_norm
-
-    if key is not None:
-        return {key: grad_gnorm}
-    else:
-        return {}
+# SACPolicyTest = build_policy_class(
+#     name="SACTorchPolicy",
+#     framework="torch",
+#     loss_fn=actor_critic_loss_fix,
+#     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
+#     stats_fn=stats,
+#     postprocess_fn=postprocess_trajectory,
+#     optimizer_fn=optimizer_fn,
+#     validate_spaces=validate_spaces,
+#     before_loss_init=setup_late_mixins,
+#     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
+#     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
+#     mixins=[SACLearning, TargetNetworkMixin, SACEvolveMixin],
+#     action_distribution_fn=action_distribution_fn_fix,
+#     apply_gradients_fn=apply_gradients
+# )
 
 
-def apply_gradients(policy, gradients) -> None:
-    assert gradients == _directStepOptimizerSingleton
-    # For policy gradient, update policy net one time v.s.
-    # update critic net `policy_delay` time(s).
-    if policy.global_step % policy.config.get("policy_delay", 1) == 0:
-        with disable_grad_ctx(policy.model.q_variables()):
-            policy.actor_optim.step()
-
-    for critic_opt in policy.critic_optims:
-        critic_opt.step()
-
-    if hasattr(policy, "alpha_optim"):
-        policy.alpha_optim.step()
-
-    # Increment global step & apply ops.
-    policy.global_step += 1
-
-
-# Build a child class of `TorchPolicy`, given the custom functions defined
-# above.
 SACPolicy = build_policy_class(
-    name="SACTorchPolicy",
+    name="SACPolicy",
     framework="torch",
-    loss_fn=actor_critic_loss_fix,
-    get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
-    stats_fn=stats,
-    postprocess_fn=postprocess_trajectory,
-    extra_grad_process_fn=apply_and_record_grad_clipping,
-    optimizer_fn=optimizer_fn,
-    validate_spaces=validate_spaces,
-    before_loss_init=setup_late_mixins,
-    make_model_and_action_dist=build_sac_model_and_action_dist_fix,
-    extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
-    action_distribution_fn=action_distribution_fn_fix,
-    apply_gradients_fn=apply_gradients
-)
-
-
-SACPolicy_FixedAlpha = build_policy_class(
-    name="SACTorchPolicy",
-    framework="torch",
-    loss_fn=actor_critic_loss_no_alpha,
-    get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
-    stats_fn=stats,
-    postprocess_fn=postprocess_trajectory,
-    # extra_grad_process_fn=apply_grad_clipping,
-    extra_grad_process_fn=apply_and_record_grad_clipping,
-    optimizer_fn=optimizer_fn_no_alpha,
-    validate_spaces=validate_spaces,
-    before_loss_init=setup_late_mixins,
-    make_model_and_action_dist=build_sac_model_and_action_dist_fix,
-    extra_learn_fetches_fn=concat_multi_gpu_td_errors,
-    mixins=[TorchPolicyMod, TargetNetworkMixin, SACEvolveMixin],
-    action_distribution_fn=action_distribution_fn_fix,
-    apply_gradients_fn=apply_gradients
-)
-
-
-SACPolicyTest = build_policy_class(
-    name="SACTorchPolicy",
-    framework="torch",
-    loss_fn=actor_critic_loss_fix,
+    loss_fn=actor_critic_loss_fix, # only use for view_req
     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
     stats_fn=stats,
     postprocess_fn=postprocess_trajectory,
@@ -437,5 +334,4 @@ SACPolicyTest = build_policy_class(
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
     mixins=[SACLearning, TargetNetworkMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,
-    apply_gradients_fn=apply_gradients
 )

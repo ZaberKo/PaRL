@@ -49,10 +49,13 @@ class TargetNetworkMixin:
         # target Q network, using (soft) tau-synching.
         tau = tau or self.config.get("tau")
 
+        model=self.model
+        target_model=self.target_models[self.model]
+
         with torch.no_grad():
             for p, p_target in zip(
-                self.model.parameters(),
-                self.target_model.parameters()
+                model.parameters(),
+                target_model.parameters()
             ):
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)

@@ -1,6 +1,7 @@
 import numpy as np
 from ray.rllib.algorithms.sac import SAC, SACConfig
 
+from parl.policy import SACPolicy
 
 from ray.rllib.execution.rollout_ops import (
     synchronous_parallel_sample,
@@ -23,8 +24,6 @@ from ray.rllib.execution.common import (
     LAST_TARGET_UPDATE_TS,
     NUM_TARGET_UPDATES,
 )
-from ray.rllib.utils.deprecation import DEPRECATED_VALUE
-from ray.rllib.utils.replay_buffers.utils import sample_min_n_steps_from_buffer
 
 
 def calculate_rr_weights(config: AlgorithmConfigDict):
@@ -57,7 +56,8 @@ def calculate_rr_weights(config: AlgorithmConfigDict):
 class SACConfigMod(SACConfig):
     def __init__(self, algo_class=None):
         super().__init__(algo_class=algo_class or SAC_Parallel)
-
+        self.tune_alpha = True
+        self.policy_delay = 1
         self.optimization = {
             "actor_learning_rate": 3e-4,
             "critic_learning_rate": 3e-4,
@@ -67,17 +67,53 @@ class SACConfigMod(SACConfig):
             "alpha_grad_clip": None
         }
 
-    def training(self, *, optimization: dict = None, **kwargs):
+        self.q_model_config = {
+            "fcnet_hiddens": [256, 256],
+            "fcnet_activation": "relu",
+            "post_fcnet_hiddens": [],
+            "post_fcnet_activation": None,
+            "custom_model": None,  # Use this to define custom Q-model(s).
+            "custom_model_config": {},
+        }
+        self.policy_model_config = {
+            "fcnet_hiddens": [256, 256],
+            "fcnet_activation": "relu",
+            "post_fcnet_hiddens": [],
+            "post_fcnet_activation": None,
+            "custom_model": None,  # Use this to define a custom policy model.
+            "custom_model_config": {},
+            "add_layer_norm": False
+        }
+
+    def training(
+        self,
+        *,
+        add_actor_layer_norm: bool = None,
+        tune_alpha: bool = None,
+        policy_delay: int = None,
+        optimization: dict = None,
+        **kwargs
+    ):
         super().training(**kwargs)
+        if add_actor_layer_norm is not None:
+            self.policy_model_config["add_layer_norm"] = add_actor_layer_norm
+
+        if tune_alpha is not None:
+            self.tune_alpha = tune_alpha
+        if policy_delay is not None:
+            self.policy_delay = policy_delay
         if optimization is not None:
             self.optimization.update(optimization)
-        
+
         return self
 
 
 class SAC_Parallel(SAC):
     _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
         ["extra_python_environs_for_driver"]
+
+    def get_default_policy_class(self, config):
+        return SACPolicy
 
     @classmethod
     def get_default_config(cls) -> AlgorithmConfigDict:

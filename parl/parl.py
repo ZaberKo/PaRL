@@ -8,7 +8,8 @@ import numpy as np
 import ray
 
 from ray.rllib.algorithms import Algorithm
-from ray.rllib.algorithms.sac import SAC, SACConfig
+from ray.rllib.algorithms.sac import SAC
+from parl.sac import SACConfigMod
 
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
@@ -66,7 +67,7 @@ SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
 FITNESS = "fitness"
 
 
-class PaRLConfig(SACConfig):
+class PaRLConfig(SACConfigMod):
     def __init__(self, algo_class=None):
         super().__init__(algo_class=algo_class or PaRL)
 

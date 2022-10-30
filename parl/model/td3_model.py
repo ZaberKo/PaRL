@@ -80,7 +80,8 @@ class TD3TorchModel(TorchModelV2, nn.Module):
             num_outputs=self.action_dim,
             hiddens=actor_hiddens,
             activation=actor_hidden_activation,
-            output_activation="tanh" if self.bounded else None
+            output_activation="tanh" if self.bounded else None,
+            add_layer_norm=add_layer_norm
         )
 
         # Build the Q-net(s), including target Q-net(s).
@@ -100,7 +101,6 @@ class TD3TorchModel(TorchModelV2, nn.Module):
         else:
             self.twin_q_model = None
 
-    
     def forward(self, input_dict, state, seq_lens):
         return input_dict["obs_flat"].float(), state
 

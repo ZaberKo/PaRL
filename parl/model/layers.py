@@ -21,6 +21,7 @@ class FullyConnectedNetwork(nn.Module):
         hiddens: List[int],
         activation='relu',
         output_activation=None,
+        add_layer_norm: bool = False,
     ):
         super(FullyConnectedNetwork, self).__init__()
 
@@ -39,6 +40,11 @@ class FullyConnectedNetwork(nn.Module):
                     activation_fn=activation,
                 )
             )
+            if add_layer_norm:
+                self._hidden_layers.add_module(
+                    f"LayerNorm_{i}",
+                    nn.LayerNorm(size)
+                )
             prev_layer_size = size
         
         # output layer

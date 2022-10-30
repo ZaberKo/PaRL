@@ -71,7 +71,7 @@ tau: 0.005
 
 # delay actor update freq
 policy_delay: 1
-
+tune_alpha: true
 
 # ======== training process config =============
 min_train_timesteps_per_iteration: *train_batch_size
