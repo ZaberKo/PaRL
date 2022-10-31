@@ -191,6 +191,8 @@ class SACLearning:
         else:
             grad_info.update(self.extra_grad_info(train_batch))
 
+        return grad_info
+
     def learn_on_batch(self, postprocessed_batch: SampleBatch) -> Dict[str, TensorType]:
 
         # Set Model to train mode.
