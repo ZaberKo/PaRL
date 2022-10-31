@@ -98,8 +98,8 @@ def main(_config):
             "learning_starts": 10000,
         },
         optimization={
-            "actor_learning_rate": 3e-4,
-            "critic_learning_rate": 3e-4,
+            "actor_learning_rate": 1e-3,
+            "critic_learning_rate": 1e-3,
             "entropy_learning_rate": 3e-4,
             # "actor_grad_clip": 10,
             # "critic_grad_clip": 80,
