@@ -130,18 +130,18 @@ def calc_critic_loss(
     use_prio = False
     
     if use_prio:
-        critic_loss = [torch.mean(train_batch[PRIO_WEIGHTS]
+        critic_losses = [torch.mean(train_batch[PRIO_WEIGHTS]
                                   * F.mse_loss(input=q_t_selected, target=q_t_selected_target, reduction='none'))]
         if policy.config["twin_q"]:
-            critic_loss.append(
+            critic_losses.append(
                 torch.mean(train_batch[PRIO_WEIGHTS] *
                            F.mse_loss(input=twin_q_t_selected, target=q_t_selected_target, reduction='none'))
             )
     else:
-        critic_loss = F.mse_loss(
-            input=q_t_selected, target=q_t_selected_target, reduction='mean')
+        critic_losses = [F.mse_loss(
+            input=q_t_selected, target=q_t_selected_target, reduction='mean')]
         if policy.config["twin_q"]:
-            critic_loss.append(
+            critic_losses.append(
                 F.mse_loss(input=twin_q_t_selected,
                              target=q_t_selected_target, reduction='mean')
             )
@@ -151,11 +151,11 @@ def calc_critic_loss(
     # will be concatenated and retrieved for each individual batch item.
     model.tower_stats["td_error"] = td_error
 
-    model.tower_stats["critic_loss"] = critic_loss[0]
+    model.tower_stats["critic_loss"] = critic_losses[0]
     if policy.config["twin_q"]:
-        model.tower_stats["twin_critic_loss"] = critic_loss[1]
+        model.tower_stats["twin_critic_loss"] = critic_losses[1]
 
-    return critic_loss
+    return critic_losses
 
 
 def calc_alpha_loss(
