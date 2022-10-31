@@ -111,3 +111,17 @@ class ES(NeuroEvolution):
         # generate new pop
         self.generate_pop()
         self.sync_pop_weights()
+
+    @override(NeuroEvolution)
+    def get_iteration_results(self):
+        data = super().get_iteration_results()
+
+        target_weights = self.get_target_weights()
+        # record target_weights_flat to calc the distance between pop mean
+        self.target_weights_flat = self.flatten_weights(target_weights)
+
+        data.update({
+            "target_pop_l2_distance": np.linalg.norm(self.target_weights_flat-self.mean, ord=2)
+        })
+
+        return data
