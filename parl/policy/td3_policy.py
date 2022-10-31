@@ -285,10 +285,18 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
             ).detach()  # [B]
 
         # Compute the error (potentially clipped).
+        base_td_error = torch.abs(q_t_selected - q_t_selected_target)
+        if twin_q:
+            twin_td_error = torch.abs(twin_q_t_selected - 
+            q_t_selected_target)
+            td_error = 0.5 * (base_td_error + twin_td_error)
+        else:
+            td_error=base_td_error
+        
+
         use_prio = False
         reduction = "none" if use_prio else "mean"
         if twin_q:
-            td_error = q_t_selected - q_t_selected_target
             if use_huber:
                 errors = F.huber_loss(
                     input=q_t_selected,
@@ -311,7 +319,6 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
                 )
 
         else:
-            td_error = q_t_selected - q_t_selected_target
             if use_huber:
                 errors = F.huber_loss(
                     input=q_t_selected,
@@ -346,7 +353,7 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         model.tower_stats["critic_loss"] = critic_loss
         # TD-error tensor in final stats
         # will be concatenated and retrieved for each individual batch item.
-        model.tower_stats["td_error"] = td_error
+        model.tower_stats["td_error"] = base_td_error
 
         # Return two loss terms (corresponding to the two optimizers, we create).
         return [actor_loss, critic_loss]

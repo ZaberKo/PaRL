@@ -17,8 +17,7 @@ from parl.model.sac_model import SACTorchModel
 from .sac_policy_mixin import (
     SACEvolveMixin,
     SACLearning,
-    TargetNetworkMixin,
-    TargetNetworkMixin2
+    TargetNetworkMixin
 )
 from .policy_mixin import (
     TorchPolicyMod,

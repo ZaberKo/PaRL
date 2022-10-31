@@ -86,41 +86,6 @@ class TargetNetworkMixin:
     #     TorchPolicy.set_weights(self, weights)
     #     self.update_target()
 
-class TargetNetworkMixin2:
-    """Mixin class adding a method for (soft) target net(s) synchronizations.
-
-    - Adds the `update_target` method to the policy.
-      Calling `update_target` updates all target Q-networks' weights from their
-      respective "main" Q-metworks, based on tau (smooth, partial updating).
-    """
-
-    def __init__(self):
-        # Hard initial update from Q-net(s) to target Q-net(s).
-        self.update_target(tau=1.0)
-
-    def update_target(self, tau=None):
-        # Update_target_fn will be called periodically to copy Q network to
-        # target Q network, using (soft) tau-synching.
-        tau = tau or self.config.get("tau")
-
-        model=self.model
-        target_model=self.target_models[self.model]
-
-        with torch.no_grad():
-            for p, p_target in zip (
-                model.q_variables(),
-                target_model.q_variables()
-            ):
-                p_target.mul_(1-tau)
-                p_target.add_(tau*p)
-
-            for p, p_target in zip (
-                model.policy_variables(),
-                target_model.policy_variables()
-            ):
-                p_target.mul_(1-tau)
-                p_target.add_(tau*p)
-
 
 
 

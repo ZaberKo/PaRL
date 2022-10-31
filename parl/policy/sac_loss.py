@@ -84,7 +84,7 @@ def calc_critic_loss(
     q_t = model.get_q_values(model_out_t, train_batch[SampleBatch.ACTIONS])
     q_t_selected = torch.squeeze(q_t, dim=-1)  # [B,1] -> [B]
     if policy.config["twin_q"]:
-        twin_q_t= model.get_twin_q_values(
+        twin_q_t = model.get_twin_q_values(
             model_out_t, train_batch[SampleBatch.ACTIONS]
         )
         twin_q_t_selected = torch.squeeze(twin_q_t, dim=-1)
@@ -127,13 +127,24 @@ def calc_critic_loss(
             td_error = base_td_error
 
     # currently train_batch[PRIO_WEIGHTS] is always ones by `postprocess_nstep_and_prio()`
-    critic_loss = [torch.mean(train_batch[PRIO_WEIGHTS]
-                              * F.huber_loss(input=q_t_selected, target=q_t_selected_target, reduction='none'))]
-    if policy.config["twin_q"]:
-        critic_loss.append(
-            torch.mean(train_batch[PRIO_WEIGHTS] *
-                       F.huber_loss(input=twin_q_t_selected, target=q_t_selected_target, reduction='none'))
-        )
+    use_prio = False
+    
+    if use_prio:
+        critic_loss = [torch.mean(train_batch[PRIO_WEIGHTS]
+                                  * F.mse_loss(input=q_t_selected, target=q_t_selected_target, reduction='none'))]
+        if policy.config["twin_q"]:
+            critic_loss.append(
+                torch.mean(train_batch[PRIO_WEIGHTS] *
+                           F.mse_loss(input=twin_q_t_selected, target=q_t_selected_target, reduction='none'))
+            )
+    else:
+        critic_loss = F.mse_loss(
+            input=q_t_selected, target=q_t_selected_target, reduction='mean')
+        if policy.config["twin_q"]:
+            critic_loss.append(
+                F.mse_loss(input=twin_q_t_selected,
+                             target=q_t_selected_target, reduction='mean')
+            )
 
     model.tower_stats["q_t"] = q_t
     # TD-error tensor in final stats
@@ -198,12 +209,11 @@ def actor_critic_loss_fix(
     with torch.no_grad():
         model.log_alpha.clamp_(min=-20, max=2)
 
-
     critic_losses = calc_critic_loss(policy, model, dist_class, train_batch)
 
     with disable_grad_ctx(model.q_variables()):
         actor_loss = calc_actor_loss(policy, model, dist_class, train_batch)
-    
+
     losses = [actor_loss] + critic_losses
 
     if policy.config["tune_alpha"]:
