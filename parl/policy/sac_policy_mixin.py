@@ -124,8 +124,11 @@ class TargetNetworkMixin2:
 
 
 
-def clip_and_record_grad_norm(optimizer, clip_value=np.inf):
+def clip_and_record_grad_norm(optimizer, clip_value=None):
     grad_gnorm = 0
+
+    if clip_value is None:
+        clip_value=np.inf
 
     for param_group in optimizer.param_groups:
         grad_gnorm+=nn.utils.clip_grad_norm_(param_group["params"], clip_value)

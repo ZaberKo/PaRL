@@ -14,7 +14,7 @@ def selection_tournament(index_rank, num_offsprings, tournament_size):
 
     total_choices = len(index_rank)
     offsprings = []
-    for i in range(num_offsprings):
+    for _ in range(num_offsprings):
         winner = np.min(np.random.randint(
             total_choices, size=tournament_size))
         offsprings.append(index_rank[winner])
