@@ -62,7 +62,10 @@ class NeuroEvolution:
         return data
 
     def get_iteration_results(self):
-        return {"generation": self.generation}
+        return {
+            "generation": self.generation,
+            "fitness": self.fitnesses
+            }
 
     @staticmethod
     def get_evolution_weights(worker: RolloutWorker) -> ModelWeights:

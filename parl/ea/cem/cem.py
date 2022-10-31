@@ -143,7 +143,6 @@ class CEM(NeuroEvolution):
         data = super().get_iteration_results()
 
         data.update({
-            "fitness": self.fitnesses,
             "var_noise": self.noise,
             "pop_var_mean": np.mean(self.variance),
             "pop_var_max": np.max(self.variance),
