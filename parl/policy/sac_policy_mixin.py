@@ -98,7 +98,7 @@ def clip_and_record_grad_norm(optimizer, clip_value=None):
     for param_group in optimizer.param_groups:
         grad_gnorm+=nn.utils.clip_grad_norm_(param_group["params"], clip_value)
 
-    return grad_gnorm
+    return grad_gnorm.item()
 
 
 class SACLearning:
