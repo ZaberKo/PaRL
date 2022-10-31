@@ -33,7 +33,7 @@ from ray.rllib.utils.metrics import (
 )
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM
+from parl.ea import NeuroEvolution, CEM, ES, GA
 from parl.policy import SACPolicy
 
 from ray.rllib.policy import Policy
@@ -65,6 +65,12 @@ NUM_SAMPLES_ADDED_TO_QUEUE = "num_samples_added_to_queue"
 SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
 
 FITNESS = "fitness"
+
+evolver_algo = {
+    "es": ES,
+    "ga": GA,
+    "cem": CEM
+}
 
 
 class PaRLConfig(SACConfigMod):
@@ -127,6 +133,8 @@ class PaRLConfig(SACConfigMod):
         self.tau = 0.005
         self.normalize_actions = True
         self.policy_delay = 1
+        self.tune_alpha = True
+        self.evolver_algo = 'cem'
 
         # learner thread config
         self.num_multi_gpu_tower_stacks = 8
@@ -181,17 +189,18 @@ class PaRL(SAC):
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
         self.pop_workers = WorkerSet(
-                env_creator=self.env_creator,
-                validate_env=self.validate_env,
-                policy_class=self.get_default_policy_class(self.pop_config),
-                trainer_config=self.pop_config,
-                num_workers=self.pop_size,
-                local_worker=False,
-                logdir=self.logdir,
-            )
-        if self.pop_size>0:
+            env_creator=self.env_creator,
+            validate_env=self.validate_env,
+            policy_class=self.get_default_policy_class(self.pop_config),
+            trainer_config=self.pop_config,
+            num_workers=self.pop_size,
+            local_worker=False,
+            logdir=self.logdir,
+        )
+        if self.pop_size > 0:
             self.ea_config = self.config["ea_config"]
-            self.evolver: NeuroEvolution = CEM(
+            evolver_cls = evolver_algo[self.config.get("evolver_algo", "cem")]
+            self.evolver: NeuroEvolution = evolver_cls(
                 self.ea_config, self.pop_workers, self.workers.local_worker())
 
         # ========== remote replay buffer ========
@@ -247,8 +256,7 @@ class PaRL(SAC):
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-
-        ts = 0 # total sample steps in the iteration
+        ts = 0  # total sample steps in the iteration
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
@@ -282,13 +290,14 @@ class PaRL(SAC):
             )
 
         # step 4: apply NE
-        if self.pop_size>0:
+        if self.pop_size > 0:
             fitnesses = self._calc_fitness(pop_sample_batches)
-            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum() for episode in flatten_batches(target_sample_batches)])
+            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
+            ) for episode in flatten_batches(target_sample_batches)])
             self.evolver.evolve(fitnesses, target_fitness=target_fitness)
-            with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
-                # set pop workers with new generated indv weights
-                self.evolver.sync_pop_weights()
+            # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
+            #     # set pop workers with new generated indv weights
+            #     self.evolver.sync_pop_weights()
 
         # Update replay buffer priorities.
         # update_priorities_in_replay_buffer(
@@ -300,7 +309,7 @@ class PaRL(SAC):
 
         # step 5: retrieve train_results from learner thread and update target network
         train_results = self._process_trained_results()
-        if self.pop_size>0:
+        if self.pop_size > 0:
             train_results.update({
                 "ea_results": self.evolver.get_iteration_results()
             })
@@ -386,7 +395,7 @@ class PaRL(SAC):
         result["info"].update(
             self._learner_thread.stats()
         )
-        if self.pop_size>0:
+        if self.pop_size > 0:
             result["info"].update(
                 self.evolver.stats()
             )

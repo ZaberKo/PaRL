@@ -9,23 +9,23 @@ from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
-# from ray.rllib.utils.numpy import (
-#     SMALL_NUMBER,
-#     MIN_LOG_NN_OUTPUT,
-#     MAX_LOG_NN_OUTPUT
-# )
+from ray.rllib.utils.numpy import (
+    SMALL_NUMBER,
+    MIN_LOG_NN_OUTPUT,
+    MAX_LOG_NN_OUTPUT
+)
 from ray.rllib.utils.typing import TensorType, List, Union, Tuple, ModelConfigDict
 
 torch, nn = try_import_torch()
 
 
 
-SMALL_NUMBER=1e-9
-MIN_LOG_NN_OUTPUT = -20
-MAX_LOG_NN_OUTPUT = 2
+# SMALL_NUMBER=1e-9
+# MIN_LOG_NN_OUTPUT = -20
+# MAX_LOG_NN_OUTPUT = 2
 
 # numerically stable version of TorchSquashedGaussian
-class SquashedGaussian(TorchSquashedGaussian):
+class SquashedGaussian(TorchDistributionWrapper):
     def __init__(
         self,
         inputs: List[TensorType],
@@ -54,7 +54,21 @@ class SquashedGaussian(TorchSquashedGaussian):
         self.mean = mean
         self.std = std
 
-    @override(TorchSquashedGaussian)
+    @override(ActionDistribution)
+    def deterministic_sample(self) -> TensorType:
+        self.last_sample = self._squash(self.dist.mean)
+        return self.last_sample
+
+    @override(TorchDistributionWrapper)
+    def sample(self) -> TensorType:
+        # Use the reparameterization version of `dist.sample` to allow for
+        # the results to be backprop'able e.g. in a loss term.
+
+        normal_sample = self.dist.rsample()
+        self.last_sample = self._squash(normal_sample)
+        return self.last_sample
+
+    @override(TorchDistributionWrapper)
     def logp(self, x: TensorType) -> TensorType:
         # Unsquash values (from [low,high] to ]-inf,inf[)
         u = self._unsquash(x)  # means `u` in SAC paper
@@ -96,6 +110,24 @@ class SquashedGaussian(TorchSquashedGaussian):
         unsquashed = torch.atanh(save_normed_values)
         return unsquashed
 
+    def sampled_action_logp(self) -> TensorType:
+        assert self.last_sample is not None
+        return self.logp(self.last_sample)
+
+    @staticmethod
+    @override(ActionDistribution)
+    def required_model_output_shape(
+        action_space: gym.Space, model_config: ModelConfigDict
+    ) -> Union[int, np.ndarray]:
+        return np.prod(action_space.shape, dtype=np.int32) * 2
+    
+    @override(TorchDistributionWrapper)
+    def entropy(self) -> TensorType:
+        raise ValueError("Entropy not defined for SquashedGaussian!")
+
+    @override(TorchDistributionWrapper)
+    def kl(self, other: ActionDistribution) -> TensorType:
+        raise ValueError("KL not defined for SquashedGaussian!")
 
 class SquashedGaussian2(TorchDistributionWrapper):
     """

@@ -37,13 +37,21 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: cem
+evolver_algo: es
 ea_config:
   # CEM hyperparam
-  elite_fraction: 0.5
-  noise_decay_coeff: 0.95
-  noise_init: !!float 1e-3
-  noise_end: !!float 1e-5
+  # elite_fraction: 0.5
+  # noise_decay_coeff: 0.95
+  # noise_init: !!float 1e-3
+  # noise_end: !!float 1e-5
+  # GA
+  # migration_freq: 10
+  # migration_start: 0
+  # elite_fraction: 0.2
+  # crossover_prob: 0
+  # mutation_prob: 0.9
+  # ES
+  noise_stdev: 0.05
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
@@ -67,12 +75,12 @@ optimization:
 
 # lr_schedule: [[0, !!float 3e-4],[50000000, !!float 1e-8]]
 gamma: 0.99
-initial_alpha: 1.0
+initial_alpha: 0.2
 tau: 0.005
 
 # delay actor update freq
 policy_delay: 1
-tune_alpha: true
+tune_alpha: false
 
 # ======== training process config =============
 min_train_timesteps_per_iteration: *train_batch_size

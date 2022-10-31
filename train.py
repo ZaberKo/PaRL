@@ -65,9 +65,15 @@ def main(config):
 
     # mujoco_env_setting
     env: str = config["env"]
-    env_config = mujoco_config.get(
-        env.split("-")[0], {}).get("Parameterizable-v3", {})
-    default_config.environment(env=env, env_config=env_config)
+    # env_config = mujoco_config.get(
+    #     env.split("-")[0], {}).get("Parameterizable-v3", {})
+    default_config= default_config.environment(
+        env=env, 
+        # env_config=env_config
+        )
+    default_config=default_config.training(
+        add_actor_layer_norm=True
+    )
 
     default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
