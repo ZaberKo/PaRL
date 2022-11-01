@@ -9,8 +9,8 @@ from ray.rllib.utils.typing import PolicyID, SampleBatchType, ModelGradients
 
 def synchronous_parallel_sample(
     *,
-    target_worker_set: WorkerSet,
-    pop_worker_set: WorkerSet,
+    target_worker_set: WorkerSet=None,
+    pop_worker_set: WorkerSet=None,
     episodes_per_worker: int = 1
 ) -> Union[List[SampleBatchType], SampleBatchType]:
     """Runs parallel and synchronous rollouts on all remote workers.
@@ -20,23 +20,29 @@ def synchronous_parallel_sample(
     If no remote workers exist (num_workers == 0), use the local worker
     for sampling.
     """
-
-    num_target_workers = len(target_worker_set.remote_workers())
+    if target_worker_set is None:
+        num_target_workers = 0
+    else:
+        num_target_workers = len(target_worker_set.remote_workers())
     num_pop_workers = len(pop_worker_set.remote_workers())
 
     def multiple_rollout(worker: RolloutWorker):
         return [worker.sample() for _ in range(episodes_per_worker)]
 
+
     # sample_batches axis: (worker, episode)
     if num_target_workers == 0:
-        target_sample_batches = [
+        if target_worker_set is None:
+            target_sample_batches = []
+        else:
+            target_sample_batches = [
             target_worker_set.local_worker().apply(multiple_rollout)]
-            
         pop_sample_batches = ray.get([
             worker.apply.remote(multiple_rollout)
             for worker in pop_worker_set.remote_workers()
         ])
     else:
+        # target_worker_set is not None
         sample_batches = ray.get([
             worker.apply.remote(multiple_rollout)
             for worker in

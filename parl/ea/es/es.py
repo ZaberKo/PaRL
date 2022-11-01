@@ -120,3 +120,13 @@ class ES(NeuroEvolution):
         })
 
         return data
+
+    def set_pop_weights(self, worker: RolloutWorker=None):
+        # Note: use for local worker
+        if worker is None:
+            worker = self.target_worker.local_worker()
+        
+        self.set_evolution_weights(
+            worker=worker,
+            weights=self.unflatten_weights(self.mean)
+        )

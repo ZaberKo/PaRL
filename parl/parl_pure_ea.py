@@ -35,6 +35,7 @@ from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import NeuroEvolution, CEM, ES, GA
 from parl.policy import SACPolicy
+from parl.parl import PaRLConfig
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
@@ -73,93 +74,7 @@ evolver_algo = {
 }
 
 
-class PaRLConfig(SACConfigMod):
-    def __init__(self, algo_class=None):
-        super().__init__(algo_class=algo_class or PaRL)
-
-        self.store_buffer_in_checkpoints = False
-        self.replay_buffer_config = {
-            "type": "MultiAgentReplayBuffer",
-            "capacity": int(1e6),
-            "learning_starts": 10000,
-            # "no_local_replay_buffer": True,
-            "replay_buffer_shards_colocated_with_driver": False,
-            # "num_replay_buffer_shards": 1
-        }
-
-        self.optimization.update({
-            "actor_learning_rate": 3e-4,
-            "critic_learning_rate": 3e-4,
-            "entropy_learning_rate": 3e-4,
-        })
-
-        self.episodes_per_worker = 1
-
-        # EA config
-        self.pop_size = 10
-        self.pop_config = {
-            # "explore": True,
-            # "batch_mode": "complete_episodes",
-            # "rollout_fragment_length": 1
-        }
-
-        self.ea_config = {
-            "elite_fraction": 0.5,
-            "noise_decay_coeff": 0.95,
-            "noise_init": 1e-3,
-            "noise_end": 1e-5
-        }
-
-        # training config
-        self.n_step = 1
-        self.initial_alpha = 1.0
-        self.tau = 0.005
-        self.normalize_actions = True
-        self.policy_delay = 1
-        self.tune_alpha = True
-        self.evolver_algo = 'cem'
-
-        # learner thread config
-        self.num_multi_gpu_tower_stacks = 8
-        self.learner_queue_size = 16
-        self.num_data_load_threads = 16
-
-        self.target_network_update_freq = 1  # unit: iteration
-
-        # reporting
-        self.metrics_episode_collection_timeout_s = 60.0
-        self.metrics_num_episodes_for_smoothing = 5
-        self.min_time_s_per_iteration = 0
-        self.min_sample_timesteps_per_iteration = 0
-        self.min_train_timesteps_per_iteration = 0
-
-        # default_resources
-        self.num_cpus_per_worker = 1
-        self.num_envs_per_worker = 1
-        self.num_cpus_for_local_worker = 1
-        self.num_gpus_per_worker = 0
-
-        self.framework("torch")
-
-
-def make_learner_thread(local_worker, config):
-    logger.info(
-        "Enabling multi-GPU mode, {} GPUs, {} parallel tower-stacks".format(
-            config["num_gpus"], config["num_multi_gpu_tower_stacks"]
-        )
-    )
-
-    learner_thread = MultiGPULearnerThread(
-        local_worker=local_worker,
-        num_multi_gpu_tower_stacks=config["num_multi_gpu_tower_stacks"],
-        learner_queue_size=config["learner_queue_size"],
-        num_data_load_threads=config["num_data_load_threads"]
-    )
-
-    return learner_thread
-
-
-class PaRL(SAC):
+class PaRL_PureEA(SAC):
     _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
         ["pop_config", "ea_config", "extra_python_environs_for_driver"]
     _override_all_subkeys_if_type_changes = SAC._override_all_subkeys_if_type_changes + \
@@ -186,41 +101,6 @@ class PaRL(SAC):
             self.evolver: NeuroEvolution = evolver_cls(
                 self.ea_config, self.pop_workers, self.workers.local_worker())
 
-        # ========== remote replay buffer ========
-
-        # # Create copy here so that we can modify without breaking other logic
-        # replay_actor_config = copy.deepcopy(self.config["replay_buffer_config"])
-        # num_replay_buffer_shards = replay_actor_config.get("num_replay_buffer_shards",1)
-        # replay_actor_config["capacity"] = (
-        #     self.config["replay_buffer_config"]["capacity"] // num_replay_buffer_shards
-        # )
-        # ReplayActor = ray.remote(num_cpus=0)(replay_actor_config["type"])
-
-        # if replay_actor_config["replay_buffer_shards_colocated_with_driver"]:
-        #     self._replay_actors = create_colocated_actors(
-        #         actor_specs=[  # (class, args, kwargs={}, count)
-        #             (
-        #                 ReplayActor,
-        #                 None,
-        #                 replay_actor_config,
-        #                 num_replay_buffer_shards,
-        #             )
-        #         ],
-        #         node="localhost",  # localhost
-        #     )[0]  # [0]=only one item in `actor_specs`.
-        # # Place replay buffer shards on any node(s).
-        # else:
-        #     self._replay_actors = [
-        #         ReplayActor.remote(*replay_actor_config)
-        #         for _ in range(num_replay_buffer_shards)
-        #     ]
-
-        # =========== learner thread ===========
-        # do not sync pop_workers weights
-        self._learner_thread = make_learner_thread(
-            self.workers.local_worker(), self.config)
-        self._learner_thread.start()
-
         self.num_updates_since_last_target_update = 0
 
     @override(SAC)
@@ -230,24 +110,26 @@ class PaRL(SAC):
 
         # Step 1: Sample episodes from workers.
         target_sample_batches, pop_sample_batches = synchronous_parallel_sample(
-            target_worker_set=self.workers,
+            target_worker_set=None,
             pop_worker_set=self.pop_workers,
             episodes_per_worker=self.config["episodes_per_worker"]
         )
+
+        assert len(target_sample_batches) == 0
 
         # Step 2: Store samples into replay buffer
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        ts = 0  # total sample steps in the iteration
+        # ts = 0  # total sample steps in the iteration
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
-            ts += batch.env_steps()
+            # ts += batch.env_steps()
             # Store new samples in the replay buffer
             # Use deprecated add_batch() to support old replay buffers for now
-            self.local_replay_buffer.add(batch)
+            # self.local_replay_buffer.add(batch)
 
         global_vars = {
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
@@ -256,21 +138,21 @@ class PaRL(SAC):
         # step 3: sample batches from replay buffer and place them on learner queue
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
-        num_train_batches = round(ts/10)
-        for _ in range(num_train_batches):
-            logger.info(f"add {num_train_batches} batches to learner thread")
-            train_batch = self.local_replay_buffer.sample(train_batch_size)
+        # num_train_batches = round(ts/10)
+        # for _ in range(num_train_batches):
+        #     logger.info(f"add {num_train_batches} batches to learner thread")
+        #     train_batch = self.local_replay_buffer.sample(train_batch_size)
 
-            # replay buffer learning start size not meet
-            if train_batch is None or len(train_batch) == 0:
-                self.workers.local_worker().set_global_vars(global_vars)
-                return {}
+        #     # replay buffer learning start size not meet
+        #     if train_batch is None or len(train_batch) == 0:
+        #         self.workers.local_worker().set_global_vars(global_vars)
+        #         return {}
 
-            # target agent is updated at background thread
-            self._learner_thread.inqueue.put(train_batch, block=True)
-            self._counters[NUM_SAMPLES_ADDED_TO_QUEUE] += (
-                batch.agent_steps() if self._by_agent_steps else batch.count
-            )
+        #     # target agent is updated at background thread
+        #     self._learner_thread.inqueue.put(train_batch, block=True)
+        #     self._counters[NUM_SAMPLES_ADDED_TO_QUEUE] += (
+        #         batch.agent_steps() if self._by_agent_steps else batch.count
+        #     )
 
         # step 4: apply NE
         if self.pop_size > 0:
@@ -282,6 +164,11 @@ class PaRL(SAC):
             #     # set pop workers with new generated indv weights
             #     self.evolver.sync_pop_weights()
 
+            # NEW:
+            self.evolver.set_pop_weights(
+                self.workers.local_worker()
+            )
+
         # Update replay buffer priorities.
         # update_priorities_in_replay_buffer(
         #     self.local_replay_buffer,
@@ -291,7 +178,8 @@ class PaRL(SAC):
         # )
 
         # step 5: retrieve train_results from learner thread and update target network
-        train_results = self._process_trained_results()
+        # train_results = self._process_trained_results()
+        train_results = {}
         if self.pop_size > 0:
             train_results.update({
                 "ea_results": self.evolver.get_iteration_results()
@@ -306,58 +194,7 @@ class PaRL(SAC):
         # Return all collected metrics for the iteration.
         return train_results
 
-    def _process_trained_results(self) -> ResultDict:
-        # Get learner outputs/stats from output queue.
-        # and update the target network
-        learner_infos = []
-        num_env_steps_trained = 0
-        num_agent_steps_trained = 0
-        # Loop through output queue and update our counts.
-        for _ in range(self._learner_thread.outqueue.qsize()):
-            if self._learner_thread.is_alive():
-                (
-                    env_steps,
-                    learner_results,
-                ) = self._learner_thread.outqueue.get()
-                self._update_target_networks()
-                num_env_steps_trained += env_steps
-                num_agent_steps_trained += env_steps
-                if learner_results:
-                    learner_infos.append(learner_results)
-            else:
-                raise RuntimeError("The learner thread died while training")
-        # Nothing new happened since last time, use the same learner stats.
-        if not learner_infos:
-            final_learner_info = copy.deepcopy(
-                self._learner_thread.learner_info)
-        # Accumulate learner stats using the `LearnerInfoBuilder` utility.
-        else:
-            builder = LearnerInfoBuilder()
-            for info in learner_infos:
-                builder.add_learn_on_batch_results_multi_agent(info)
-            final_learner_info = builder.finalize()
-        # Update the steps trained counters.
-        self._counters[NUM_ENV_STEPS_TRAINED] += num_env_steps_trained
-        self._counters[NUM_AGENT_STEPS_TRAINED] += num_agent_steps_trained
-        return final_learner_info
 
-    def _update_target_networks(self):
-        local_worker = self.workers.local_worker()
-        # Update target network every `target_network_update_freq` training update.
-        self.num_updates_since_last_target_update += 1
-        if self.num_updates_since_last_target_update >= self.config["target_network_update_freq"]:
-            with self._timers[TARGET_NET_UPDATE_TIMER]:
-                to_update = local_worker.get_policies_to_train()
-                local_worker.foreach_policy_to_train(
-                    lambda p, pid: pid in to_update and p.update_target()
-                )
-            self.num_updates_since_last_target_update = 0
-            self._counters[NUM_TARGET_UPDATES] += 1
-            self._counters[LAST_TARGET_UPDATE_TS] = self._counters[
-                NUM_AGENT_STEPS_TRAINED
-                if self._by_agent_steps
-                else NUM_ENV_STEPS_TRAINED
-            ]
 
     def _calc_fitness(self, sample_batches):
         if self.pop_size != len(sample_batches):
@@ -371,18 +208,7 @@ class PaRL(SAC):
                 fitnesses.append(total_rewards)
         return fitnesses
 
-    @override(Algorithm)
-    def _compile_iteration_results(self, *args, **kwargs):
-        result = super()._compile_iteration_results(*args, **kwargs)
-        # add learner thread metrics
-        result["info"].update(
-            self._learner_thread.stats()
-        )
-        if self.pop_size > 0:
-            result["info"].update(
-                self.evolver.stats()
-            )
-        return result
+
 
     @override(SAC)
     def validate_config(self, config: AlgorithmConfigDict) -> None:
