@@ -3,6 +3,7 @@ from ray.rllib.utils.torch_utils import huber_loss
 from ray.rllib.algorithms.dqn.dqn_tf_policy import PRIO_WEIGHTS
 
 from parl.utils import disable_grad_ctx
+from functools import partial
 
 from typing import List, Type, Union, Dict, Tuple, Optional
 from ray.rllib.policy.policy import Policy
@@ -63,6 +64,14 @@ def calc_critic_loss(
     dist_class: Type[TorchDistributionWrapper],
     train_batch: SampleBatch
 ):
+    use_huber=policy.config.get("use_huber", False)
+    huber_beta = policy.config.get("huber_beta", 1.0)
+
+    if use_huber:
+        loss_func=partial(F.smooth_l1_loss, beta=huber_beta)
+    else:
+        loss_func=F.mse_loss
+
     # Look up the target model (tower) using the model tower.
     target_model = policy.target_models[model]
     alpha = torch.exp(model.log_alpha).detach()
@@ -131,18 +140,18 @@ def calc_critic_loss(
     
     if use_prio:
         critic_losses = [torch.mean(train_batch[PRIO_WEIGHTS]
-                                  * F.mse_loss(input=q_t_selected, target=q_t_selected_target, reduction='none'))]
+                                  * loss_func(input=q_t_selected, target=q_t_selected_target, reduction='none'))]
         if policy.config["twin_q"]:
             critic_losses.append(
                 torch.mean(train_batch[PRIO_WEIGHTS] *
-                           F.mse_loss(input=twin_q_t_selected, target=q_t_selected_target, reduction='none'))
+                           loss_func(input=twin_q_t_selected, target=q_t_selected_target, reduction='none'))
             )
     else:
-        critic_losses = [F.mse_loss(
+        critic_losses = [loss_func(
             input=q_t_selected, target=q_t_selected_target, reduction='mean')]
         if policy.config["twin_q"]:
             critic_losses.append(
-                F.mse_loss(input=twin_q_t_selected,
+                loss_func(input=twin_q_t_selected,
                              target=q_t_selected_target, reduction='mean')
             )
 

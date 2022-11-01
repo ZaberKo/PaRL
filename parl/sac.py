@@ -64,7 +64,9 @@ class SACConfigMod(SACConfig):
             "entropy_learning_rate": 3e-4,
             "actor_grad_clip": None,
             "critic_grad_clip": None,
-            "alpha_grad_clip": None
+            "alpha_grad_clip": None,
+            "critic_use_huber": False,
+            "huber_beta": 1.0
         }
 
         self.q_model_config = {
