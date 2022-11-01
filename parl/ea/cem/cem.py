@@ -83,7 +83,7 @@ class CEM(NeuroEvolution):
     def _evolve1(self, fitnesses, target_fitness):
 
         fitnesses = np.asarray(fitnesses)
-        orders = fitnesses.argsort()
+        orders = fitnesses.argsort()[::-1]
         elite_ids = orders[:self.num_elites]
 
         target_weights = self.get_target_weights()

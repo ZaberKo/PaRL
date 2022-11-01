@@ -15,7 +15,7 @@ soft_horizon: false
 
 # ============== target config==========
 num_workers: 0 # number of workers for target policy
-num_gpus: 0.1
+num_gpus: 0
 
 batch_mode: complete_episodes
 rollout_fragment_length: 1
@@ -54,8 +54,8 @@ ea_config:
   noise_stdev: 0.05
 
 # ========= evaluation worker config ==========
-evaluation_num_workers: 0
-evaluation_interval: 1
+evaluation_num_workers: 10
+evaluation_interval: 5
 evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
@@ -83,7 +83,7 @@ policy_delay: 1
 tune_alpha: true
 
 # ======== training process config =============
-min_train_timesteps_per_iteration: *train_batch_size
+min_train_timesteps_per_iteration: 0
 
 num_multi_gpu_tower_stacks: 8
 learner_queue_size: 16

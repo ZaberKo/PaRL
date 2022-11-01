@@ -98,7 +98,7 @@ class ES(NeuroEvolution):
     def _evolve(self, fitnesses, target_fitness):
 
         fitnesses = np.asarray(fitnesses)
-        orders = fitnesses.argsort()
+        orders = fitnesses.argsort()[::-1] # descending order
 
         self.mean += self.noise_stdev * \
             np.dot(self.ws, self.noise[orders])

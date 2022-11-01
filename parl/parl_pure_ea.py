@@ -157,16 +157,17 @@ class PaRL_PureEA(SAC):
         # step 4: apply NE
         if self.pop_size > 0:
             fitnesses = self._calc_fitness(pop_sample_batches)
-            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
-            ) for episode in flatten_batches(target_sample_batches)])
-            self.evolver.evolve(fitnesses, target_fitness=target_fitness)
+            # target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
+            # ) for episode in flatten_batches(target_sample_batches)])
+
+            self.evolver.evolve(fitnesses, target_fitness=None)
             # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
             #     # set pop workers with new generated indv weights
             #     self.evolver.sync_pop_weights()
 
             # NEW:
             self.evolver.set_pop_weights(
-                self.workers.local_worker()
+                local_worker
             )
 
         # Update replay buffer priorities.

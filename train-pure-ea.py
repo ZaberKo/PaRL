@@ -16,30 +16,6 @@ from parl import PaRLConfig, PaRL_PureEA
 from parl.env_config import mujoco_config
 
 
-class CPUInitCallback(DefaultCallbacks):
-    def __init__(self):
-        super().__init__()
-        self.num_cpus_for_local_worker = 8
-        self.num_cpus_for_rollout_worker = 8
-
-    def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
-        # ============ driver worker multi-thread ==========
-        # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
-        # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        torch.set_num_threads(self.num_cpus_for_local_worker)
-
-        # ============ rollout worker multi-thread ==========
-        def set_rollout_num_threads(worker):
-            torch.set_num_threads(self.num_cpus_for_rollout_worker)
-
-        pendings = [w.apply.remote(set_rollout_num_threads)
-                    for w in algorithm.workers.remote_workers()]
-        ray.wait(pendings, num_returns=len(pendings))
-
-
 def main(config):
     tuner_config = config.pop("tuner_config")
 
@@ -56,8 +32,32 @@ def main(config):
         )
     )
 
+    class CPUInitCallback(DefaultCallbacks):
+        def __init__(self):
+            super().__init__()
+            self.num_cpus_for_local_worker = 4
+            self.num_cpus_for_rollout_worker = 1
+
+        def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
+            # ============ driver worker multi-thread ==========
+            n = int(self.num_cpus_for_local_worker)
+            os.environ["OMP_NUM_THREADS"] = str(n)
+            os.environ["OPENBLAS_NUM_THREADS"] = str(n)
+            os.environ["MKL_NUM_THREADS"] = str(n)
+            os.environ["VECLIB_MAXIMUM_THREADS"] = str(n)
+            os.environ["NUMEXPR_NUM_THREADS"] = str(n)
+            torch.set_num_threads(n)
+
+            # ============ rollout worker multi-thread ==========
+            def set_rollout_num_threads(worker):
+                torch.set_num_threads(self.num_cpus_for_rollout_worker)
+
+            pendings = [w.apply.remote(set_rollout_num_threads)
+                        for w in algorithm.workers.remote_workers()]
+            ray.wait(pendings, num_returns=len(pendings))
+
     default_config = PaRLConfig()
-    # default_config = default_config.callbacks(CPUInitCallback)
+    default_config = default_config.callbacks(CPUInitCallback)
     # default_config = default_config.python_environment(
     #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(8)},
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(8)}
@@ -67,11 +67,11 @@ def main(config):
     env: str = config["env"]
     # env_config = mujoco_config.get(
     #     env.split("-")[0], {}).get("Parameterizable-v3", {})
-    default_config= default_config.environment(
-        env=env, 
+    default_config = default_config.environment(
+        env=env,
         # env_config=env_config
-        )
-    default_config=default_config.training(
+    )
+    default_config = default_config.training(
         add_actor_layer_norm=True
     )
 
@@ -101,10 +101,23 @@ def main(config):
 
     time.sleep(20)
 
+    # trainer=PaRL_PureEA(config=merged_config)
+    # from tqdm import trange
+    # from ray.rllib.utils.debug import summarize
+
+    # for i in trange(10000):
+    #     res = trainer.train()
+    #     print(f"======= iter {i+1} ===========")
+    #     del res["config"]
+    #     del res["hist_stats"]
+    #     print(summarize(res))
+    #     print("+"*20)
+
+    # time.sleep(20)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL.yaml")
+    parser.add_argument("--config_file", type=str, default="PaRL-pure-es.yaml")
     parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 
@@ -113,5 +126,5 @@ if __name__ == "__main__":
         config = yaml.load(f)
     # config=namedtuple('Config',config)(**config)
     if args.env:
-        config["env"]=args.env
+        config["env"] = args.env
     main(config)
