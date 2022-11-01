@@ -45,7 +45,8 @@ class ES(NeuroEvolution):
 
         # no need to explicit deep copy
         self.mean = self.flatten_weights(target_weights)
-        self.noise = np.zeros((self.pop_size, self.num_params))
+        # record the last used noise
+        self.noise = None
 
         self.pop_flat = np.zeros((self.pop_size, self.num_params))
 
@@ -57,15 +58,10 @@ class ES(NeuroEvolution):
 
         self.target_weights_flat = None
 
-
     def generate_pop(self):
-        self.noise = np.random.normal(
-            0,
-            self.noise_stdev,
-            size=(self.pop_size, self.num_params)
-        )
+        self.noise = np.random.randn(self.pop_size, self.num_params)
 
-        self.pop_flat = self.mean + self.noise
+        self.pop_flat = self.mean + self.noise_stdev * self.noise
 
     @override(NeuroEvolution)
     def sync_pop_weights(self):
@@ -104,9 +100,8 @@ class ES(NeuroEvolution):
         fitnesses = np.asarray(fitnesses)
         orders = fitnesses.argsort()
 
-        self.mean = self.mean + np.dot(self.ws, self.noise[orders])
-
-
+        self.mean += self.noise_stdev * \
+            np.dot(self.ws, self.noise[orders])
 
         # generate new pop
         self.generate_pop()
