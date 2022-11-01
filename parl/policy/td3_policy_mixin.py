@@ -1,6 +1,15 @@
+import numpy as np
 import torch
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
+
+from parl.utils import disable_grad_ctx
+from .policy_mixin import TorchPolicyCustomUpdate
+from .utils import clip_and_record_grad_norm
+from .td3_loss import (
+    calc_actor_loss,
+    calc_critic_loss
+)
 
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.typing import ModelWeights
@@ -49,8 +58,8 @@ class TargetNetworkMixin:
         # target Q network, using (soft) tau-synching.
         tau = tau or self.config.get("tau")
 
-        model=self.model
-        target_model=self.target_models[self.model]
+        model = self.model
+        target_model = self.target_models[self.model]
 
         with torch.no_grad():
             for p, p_target in zip(
@@ -67,3 +76,40 @@ class TargetNetworkMixin:
     #     # at the same time.
     #     TorchPolicyV2.set_weights(self, weights)
     #     self.update_target()
+
+
+class TD3Learning(TorchPolicyCustomUpdate):
+    def __init__(self):
+        self.global_trainstep = 0
+
+    def _compute_grad_and_apply(self, train_batch):
+        grad_info = {}
+        # calc gradient and updates
+        # optim_config = self.config["optimization"]
+
+        # ========= critic update ============
+        critic_loss = calc_critic_loss(
+            self, self.model, self.dist_class, train_batch)
+
+        self.critic_optim.zero_grad()
+        critic_loss.backward()
+        grad_info["critic_gnorm"] = clip_and_record_grad_norm(
+            self.critic_optim
+        )
+        self.critic_optim.step()
+
+        # ============ actor update ===============
+        if self.global_trainstep % self.config.get("policy_delay", 1) == 0:
+            with disable_grad_ctx(self.model.q_variables()):
+                actor_loss = calc_actor_loss(
+                    self, self.model, self.dist_class, train_batch)
+                self.actor_optim.zero_grad()
+                actor_loss.backward()
+                grad_info["actor_gnorm"] = clip_and_record_grad_norm(
+                    self.actor_optim
+                )
+                self.actor_optim.step()
+
+        self.global_trainstep += 1
+
+        return grad_info

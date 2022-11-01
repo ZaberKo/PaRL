@@ -9,9 +9,6 @@ from typing import List, Type, Union, Dict, Tuple, Optional
 from ray.rllib.policy.policy import Policy
 from ray.rllib.utils.typing import (
     TensorType,
-    AlgorithmConfigDict,
-    LocalOptimizer,
-    ModelInputDict
 )
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.policy.sample_batch import SampleBatch

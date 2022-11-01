@@ -8,20 +8,18 @@ from .sac_loss import (
 )
 
 from parl.utils import disable_grad_ctx
+from .policy_mixin import TorchPolicyCustomUpdate
+from .utils import clip_and_record_grad_norm
 
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.numpy import convert_to_numpy
 
-from ray.rllib.evaluation import SampleBatch
-from ray.rllib.policy import TorchPolicy
+
 from ray.rllib.utils.typing import (
     GradInfoDict,
     ModelWeights,
     TensorType,
 )
-from ray.rllib.utils.metrics import NUM_AGENT_STEPS_TRAINED
-from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
-from typing import Dict
 
 class SACEvolveMixin:
     """
@@ -77,38 +75,12 @@ class TargetNetworkMixin:
                 p_target.mul_(1-tau)
                 p_target.add_(tau*p)
             
-
-    # @override(TorchPolicy)
-    # def set_weights(self, weights):
-    #     # Makes sure that whenever we restore weights for this policy's
-    #     # model, we sync the target network (from the main model)
-    #     # at the same time.
-    #     TorchPolicy.set_weights(self, weights)
-    #     self.update_target()
-
-
-
-
-def clip_and_record_grad_norm(optimizer, clip_value=None):
-    grad_gnorm = 0
-
-    if clip_value is None:
-        clip_value=np.inf
-
-    for param_group in optimizer.param_groups:
-        grad_gnorm+=nn.utils.clip_grad_norm_(param_group["params"], clip_value)
-
-    return grad_gnorm.item()
-
-
-class SACLearning:
-    """
-        Define new update pattern
-    """
+            
+class SACLearning(TorchPolicyCustomUpdate):
     def __init__(self):
-        self.global_step = 0
+        self.global_trainstep = 0
 
-    def compute_grad_and_apply(self, train_batch):
+    def _compute_grad_and_apply(self, train_batch):
         grad_info = {}
         # calc gradient and updates
         optim_config = self.config["optimization"]
@@ -126,7 +98,7 @@ class SACLearning:
             critic_optim.step()
 
         # ============ actor update ===============
-        if self.global_step % self.config.get("policy_delay", 1) == 0:
+        if self.global_trainstep % self.config.get("policy_delay", 1) == 0:
             with disable_grad_ctx(self.model.q_variables()):
                 actor_loss = calc_actor_loss(self, self.model, self.dist_class, train_batch)
                 self.actor_optim.zero_grad()
@@ -148,101 +120,8 @@ class SACLearning:
                 )
             self.alpha_optim.step()
 
-        self.global_step += 1
-
-        # for TorchPolicyV2
-        if hasattr(self, "stats_fn"):
-            grad_info.update(self.stats_fn(train_batch))
-        else:
-            grad_info.update(self.extra_grad_info(train_batch))
+        self.global_trainstep += 1
 
         return grad_info
-
-    def learn_on_batch(self, postprocessed_batch: SampleBatch) -> Dict[str, TensorType]:
-
-        # Set Model to train mode.
-        if self.model:
-            self.model.train()
-        # Callback handling.
-        custom_metrics = {}
-        self.callbacks.on_learn_on_batch(
-            policy=self, train_batch=postprocessed_batch, result=custom_metrics
-        )
-
-        # grads, fetches = self.compute_gradients(postprocessed_batch)
-        assert len(self.devices) == 1
-
-        # If not done yet, see whether we have to zero-pad this batch.
-
-        postprocessed_batch.set_training(True)
-        self._lazy_tensor_dict(postprocessed_batch, device=self.devices[0])
-
-        grad_info = self.compute_grad_and_apply(postprocessed_batch)
-
-        fetches = self.extra_compute_grad_fetches()
-        fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
-
-        if self.model:
-            fetches["model"] = self.model.metrics()
-
-        fetches.update(
-            {
-                "custom_metrics": custom_metrics,
-                NUM_AGENT_STEPS_TRAINED: postprocessed_batch.count,
-            }
-        )
-
-        return fetches
-
-    def learn_on_loaded_batch(self: TorchPolicy, offset: int = 0, buffer_index: int = 0):
-        if not self._loaded_batches[buffer_index]:
-            raise ValueError(
-                "Must call Policy.load_batch_into_buffer() before "
-                "Policy.learn_on_loaded_batch()!"
-            )
-
-        assert len(self.devices) == 1
-
-        # Get the correct slice of the already loaded batch to use,
-        # based on offset and batch size.
-        device_batch_size = self.config.get(
-            "sgd_minibatch_size", self.config["train_batch_size"]
-        ) // len(self.devices)
-
-        # Set Model to train mode.
-        if self.model:
-            self.model.train()
-
-        # only fetch gpu0 batch
-        if device_batch_size >= sum(len(s) for s in self._loaded_batches[buffer_index]):
-            device_batch = self._loaded_batches[buffer_index][0]
-        else:
-            device_batch = self._loaded_batches[buffer_index][0][offset: offset + device_batch_size]
-
-        # Callback handling.
-        batch_fetches = {}
-        custom_metrics = {}
-        self.callbacks.on_learn_on_batch(
-            policy=self, train_batch=device_batch, result=custom_metrics
-        )
-
-        # Do the (maybe parallelized) gradient calculation step.
-        grad_info = self.compute_grad_and_apply(device_batch)
-
-
-        fetches = self.extra_compute_grad_fetches()
-        fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
-
-        if self.model:
-            fetches["model"] = self.model.metrics()
-
-        fetches.update(
-            {
-                "custom_metrics": custom_metrics,
-                NUM_AGENT_STEPS_TRAINED: device_batch.count,
-            }
-        )
-
-        return batch_fetches
 
  

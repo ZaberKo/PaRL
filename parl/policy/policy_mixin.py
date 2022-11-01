@@ -12,11 +12,123 @@ from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.utils.typing import (
     GradInfoDict,
+    ModelWeights,
     TensorType,
 )
+from ray.rllib.utils.metrics import NUM_AGENT_STEPS_TRAINED
+from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
 
 
-class TorchPolicyMod:
+
+class TorchPolicyCustomUpdate:
+    """
+        Customed update steps: override TorchPolicy's learn_on_batch() and learn_on_loaded_batch()
+        Note: Currently only support one GPU.
+    """
+    def _compute_grad_and_apply(self, train_batch)->GradInfoDict:
+        raise NotImplementedError
+    
+    def compute_grad_and_apply(self, train_batch)->GradInfoDict:
+        grad_info = self._compute_grad_and_apply(train_batch)
+        
+        
+        if hasattr(self, "stats_fn"):
+            # for TorchPolicyV2
+            grad_info.update(self.stats_fn(train_batch))
+        else:
+            grad_info.update(self.extra_grad_info(train_batch))
+
+        return grad_info
+
+    def learn_on_batch(self, postprocessed_batch: SampleBatch) -> Dict[str, TensorType]:
+
+        # Set Model to train mode.
+        if self.model:
+            self.model.train()
+        # Callback handling.
+        custom_metrics = {}
+        self.callbacks.on_learn_on_batch(
+            policy=self, train_batch=postprocessed_batch, result=custom_metrics
+        )
+
+        # grads, fetches = self.compute_gradients(postprocessed_batch)
+        assert len(self.devices) == 1
+
+        # If not done yet, see whether we have to zero-pad this batch.
+
+        postprocessed_batch.set_training(True)
+        self._lazy_tensor_dict(postprocessed_batch, device=self.devices[0])
+
+        grad_info = self.compute_grad_and_apply(postprocessed_batch)
+
+        fetches = self.extra_compute_grad_fetches()
+        fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
+
+        if self.model:
+            fetches["model"] = self.model.metrics()
+
+        fetches.update(
+            {
+                "custom_metrics": custom_metrics,
+                NUM_AGENT_STEPS_TRAINED: postprocessed_batch.count,
+            }
+        )
+
+        return fetches
+
+    def learn_on_loaded_batch(self: TorchPolicy, offset: int = 0, buffer_index: int = 0):
+        if not self._loaded_batches[buffer_index]:
+            raise ValueError(
+                "Must call Policy.load_batch_into_buffer() before "
+                "Policy.learn_on_loaded_batch()!"
+            )
+
+        assert len(self.devices) == 1
+
+        # Get the correct slice of the already loaded batch to use,
+        # based on offset and batch size.
+        device_batch_size = self.config.get(
+            "sgd_minibatch_size", self.config["train_batch_size"]
+        ) // len(self.devices)
+
+        # Set Model to train mode.
+        if self.model:
+            self.model.train()
+
+        # only fetch gpu0 batch
+        if device_batch_size >= sum(len(s) for s in self._loaded_batches[buffer_index]):
+            device_batch = self._loaded_batches[buffer_index][0]
+        else:
+            device_batch = self._loaded_batches[buffer_index][0][offset: offset + device_batch_size]
+
+        # Callback handling.
+        batch_fetches = {}
+        custom_metrics = {}
+        self.callbacks.on_learn_on_batch(
+            policy=self, train_batch=device_batch, result=custom_metrics
+        )
+
+        # Do the (maybe parallelized) gradient calculation step.
+        grad_info = self.compute_grad_and_apply(device_batch)
+
+
+        fetches = self.extra_compute_grad_fetches()
+        fetches = dict(fetches, **{LEARNER_STATS_KEY: grad_info})
+
+        if self.model:
+            fetches["model"] = self.model.metrics()
+
+        fetches.update(
+            {
+                "custom_metrics": custom_metrics,
+                NUM_AGENT_STEPS_TRAINED: device_batch.count,
+            }
+        )
+
+        return batch_fetches
+
+
+class TorchPolicyMod2:
     # fix grad_info missing issue
     def learn_on_loaded_batch(self: TorchPolicy, offset: int = 0, buffer_index: int = 0):
         if not self._loaded_batches[buffer_index]:
@@ -249,32 +361,3 @@ class TorchPolicyMod:
             outputs.append(results[shard_idx])
         return outputs
 
-def concat_multi_gpu_td_errors(
-    policy: Union["TorchPolicy", "TorchPolicyV2"]
-) -> Dict[str, TensorType]:
-    """Concatenates multi-GPU (per-tower) TD error tensors given TorchPolicy.
-
-    TD-errors are extracted from the TorchPolicy via its tower_stats property.
-
-    Args:
-        policy: The TorchPolicy to extract the TD-error values from.
-
-    Returns:
-        A dict mapping strings "td_error" and "mean_td_error" to the
-        corresponding concatenated and mean-reduced values.
-    """
-    td_error = torch.cat(
-        [
-            t.tower_stats.get("td_error", torch.tensor(
-                [0.0])).to(policy.device)
-            for t in policy.model_gpu_towers
-        ],
-        dim=0,
-    )
-    policy.td_error = td_error
-    return {
-        # "td_error": td_error,
-        "max_td_error": torch.max(td_error),
-        "min_td_error": torch.min(td_error),
-        "mean_td_error": torch.mean(td_error),
-    }

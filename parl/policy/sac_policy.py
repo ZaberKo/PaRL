@@ -20,7 +20,6 @@ from .sac_policy_mixin import (
     TargetNetworkMixin
 )
 from .policy_mixin import (
-    TorchPolicyMod,
     concat_multi_gpu_td_errors
 )
 from .action_dist import (
