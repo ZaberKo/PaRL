@@ -44,7 +44,7 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL.yaml")
+    parser.add_argument("--config_file", type=str, default="PaRL-es.yaml")
     args = parser.parse_args()
 
     yaml=YAML(typ='safe')

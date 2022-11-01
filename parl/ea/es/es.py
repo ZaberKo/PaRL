@@ -11,16 +11,16 @@ from ray.rllib.utils.typing import ModelWeights
 from ray.rllib.utils.annotations import override
 
 
-class SharedNoiseTable:
-    def __init__(self, noise):
-        self.noise = noise
-        assert self.noise.dtype == np.float32
+# class SharedNoiseTable:
+#     def __init__(self, noise):
+#         self.noise = noise
+#         assert self.noise.dtype == np.float32
 
-    def get(self, i, dim):
-        return self.noise[i: i + dim]
+#     def get(self, i, dim):
+#         return self.noise[i: i + dim]
 
-    def sample_index(self, dim):
-        return np.random.randint(0, len(self.noise) - dim + 1)
+#     def sample_index(self, dim):
+#         return np.random.randint(0, len(self.noise) - dim + 1)
 
 
 class ES(NeuroEvolution):
