@@ -137,17 +137,17 @@ def calc_critic_loss(
         errors = loss_func(
             input=q_t_selected,
             target=q_t_selected_target,
-            delta=huber_threshold, reduction=reduction
+            reduction=reduction
         ) + loss_func(
             input=twin_q_t_selected,
             target=q_t_selected_target,
-            delta=huber_threshold, reduction=reduction
+            reduction=reduction
         )
     else:
         errors = loss_func(
             input=q_t_selected,
             target=q_t_selected_target,
-            delta=huber_threshold, reduction=reduction
+            reduction=reduction
         )
 
     if use_prio:

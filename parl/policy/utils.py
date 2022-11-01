@@ -44,7 +44,7 @@ def concat_multi_gpu_td_errors(
     }
 
 def clip_and_record_grad_norm(optimizer, clip_value=None):
-    grad_gnorm = torch.tensor(0, dtype=torch.float32)
+    grad_gnorm = 0
 
     if clip_value is None:
         clip_value=np.inf

@@ -19,9 +19,8 @@ from .sac_policy_mixin import (
     SACLearning,
     TargetNetworkMixin
 )
-from .policy_mixin import (
-    concat_multi_gpu_td_errors
-)
+from .utils import concat_multi_gpu_td_errors
+
 from .action_dist import (
     SquashedGaussian,
     SquashedGaussian2,

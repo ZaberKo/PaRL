@@ -6,7 +6,7 @@ from ray.rllib.algorithms.td3 import TD3Config
 
 from parl.model.td3_model import TD3TorchModel
 from .td3_policy_mixin import TD3EvolveMixin, TargetNetworkMixin, TD3Learning
-from .policy_mixin import concat_multi_gpu_td_errors
+from .utils import concat_multi_gpu_td_errors
 from .td3_loss import (
     calc_actor_loss,
     calc_critic_loss
