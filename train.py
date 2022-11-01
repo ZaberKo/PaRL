@@ -1,6 +1,6 @@
 import time
 import os
-import pickle
+import cloudpickle
 from ruamel.yaml import YAML
 import argparse
 import torch
@@ -97,7 +97,7 @@ def main(config):
     result_grid = tuner.fit()
     exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
     with open(os.path.join("results", exp_name), "wb") as f:
-        pickle.dump(result_grid, f)
+        cloudpickle.dump(result_grid, f)
 
     time.sleep(20)
 

@@ -1,5 +1,5 @@
 import os
-import pickle
+import cloudpickle
 import time
 from ruamel.yaml import YAML
 import ray
@@ -174,15 +174,15 @@ def main(_config):
 
     exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
     with open(os.path.join(config.save_folder, exp_name), "wb") as f:
-        pickle.dump(result_grid, f)
+        cloudpickle.dump(result_grid, f)
 
-    time.sleep(20)
+    time.sleep(40)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str,
-                        default="baseline/td3_baseline.yaml")
+                        default="baseline/sac_baseline.yaml")
     parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 
