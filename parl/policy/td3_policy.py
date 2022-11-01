@@ -40,8 +40,6 @@ def l2_loss(x: TensorType) -> TensorType:
     return 0.5 * torch.sum(torch.pow(x, 2.0))
 
 
-
-
 def make_ddpg_models(policy: Policy) -> ModelV2:
     num_outputs = int(np.product(policy.observation_space.shape))
     model = ModelCatalog.get_model_v2(
@@ -162,7 +160,8 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         **kwargs
     ) -> Tuple[TensorType, type, List[TensorType]]:
         model_out, _ = model(
-            SampleBatch(obs=obs_batch[SampleBatch.CUR_OBS], _is_training=is_training)
+            SampleBatch(
+                obs=obs_batch[SampleBatch.CUR_OBS], _is_training=is_training)
         )
         dist_inputs = model.get_policy_output(model_out)
 
@@ -180,7 +179,6 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         return postprocess_nstep_and_prio(
             self, sample_batch, other_agent_batches, episode
         )
-
 
     @override(TorchPolicyV2)
     def loss(
@@ -205,7 +203,7 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
             ).to(dtype=torch.float32, device=self.device)
         if not hasattr(self, "action_space_high_tensor"):
             self.action_space_high_tensor = torch.from_numpy(
-                self.action_space.high.copy(),
+                self.action_space.high,
             ).to(dtype=torch.float32, device=self.device)
 
         input_dict = SampleBatch(
@@ -287,12 +285,11 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         # Compute the error (potentially clipped).
         base_td_error = torch.abs(q_t_selected - q_t_selected_target)
         if twin_q:
-            twin_td_error = torch.abs(twin_q_t_selected - 
-            q_t_selected_target)
+            twin_td_error = torch.abs(twin_q_t_selected -
+                                      q_t_selected_target)
             td_error = 0.5 * (base_td_error + twin_td_error)
         else:
-            td_error=base_td_error
-        
+            td_error = base_td_error
 
         use_prio = False
         reduction = "none" if use_prio else "mean"
@@ -353,7 +350,7 @@ class TD3Policy(TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         model.tower_stats["critic_loss"] = critic_loss
         # TD-error tensor in final stats
         # will be concatenated and retrieved for each individual batch item.
-        model.tower_stats["td_error"] = base_td_error
+        model.tower_stats["td_error"] = td_error
 
         # Return two loss terms (corresponding to the two optimizers, we create).
         return [actor_loss, critic_loss]

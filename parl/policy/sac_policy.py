@@ -65,27 +65,25 @@ def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOpti
     """
     policy.actor_optim = torch.optim.Adam(
         params=policy.model.policy_variables(),
-        lr=config["optimization"]["actor_learning_rate"],
-        eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+        lr=config["optimization"]["actor_learning_rate"]
     )
 
-    critic_split = len(policy.model.q_variables())
+    q_params=policy.model.q_variables()
+    critic_split = len(q_params)
     if config["twin_q"]:
         critic_split //= 2
 
     policy.critic_optims = [
         torch.optim.Adam(
-            params=policy.model.q_variables()[:critic_split],
-            lr=config["optimization"]["critic_learning_rate"],
-            eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+            params=q_params[:critic_split],
+            lr=config["optimization"]["critic_learning_rate"]
         )
     ]
     if config["twin_q"]:
         policy.critic_optims.append(
             torch.optim.Adam(
-                params=policy.model.q_variables()[critic_split:],
-                lr=config["optimization"]["critic_learning_rate"],
-                eps=1e-7,  # to match tf.keras.optimizers.Adam's eps default
+                params=q_params[critic_split:],
+                lr=config["optimization"]["critic_learning_rate"]
             )
         )
 
@@ -94,8 +92,7 @@ def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOpti
     if config["tune_alpha"]:
         policy.alpha_optim = torch.optim.Adam(
             params=[policy.model.log_alpha],
-            lr=config["optimization"]["entropy_learning_rate"],
-            eps=1e-7,  # to match tf.keras.optimizers.Adam's epsilon default
+            lr=config["optimization"]["entropy_learning_rate"]
         )
         optimizers.append(policy.alpha_optim)
 

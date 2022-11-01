@@ -49,9 +49,7 @@ class Config:
         return num_cpus, num_gpus
 
 
-def main(_config):
-    config = Config(**_config)
-
+def generate_algo_config(config: Config):
     class CPUInitCallback(DefaultCallbacks):
         def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
             # ============ driver worker multi-thread ==========
@@ -79,6 +77,9 @@ def main(_config):
     )
     td3_config = td3_config.training(
         # grad_clip=config.grad_clip,
+        critic_lr = 1e-3,
+        actor_lr = 1e-3,
+        tau = 5e-3,
         policy_delay=2,
         target_noise=0.2,
         target_noise_clip=0.5,
@@ -88,7 +89,7 @@ def main(_config):
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
-            "learning_starts": 10000,
+            "learning_starts": 1000,
         }
     )
     td3_config = td3_config.resources(
@@ -142,6 +143,14 @@ def main(_config):
     # )
     td3_config = td3_config.to_dict()
 
+    return td3_config
+
+
+def main(_config):
+    config = Config(**_config)
+
+    td3_config = generate_algo_config(config)
+
     num_cpus, num_gpus = config.resources()
 
     ray.init(
@@ -189,5 +198,5 @@ if __name__ == "__main__":
         config = yaml.load(f)
 
     if args.env:
-        config["env"]=args.env
+        config["env"] = args.env
     main(config)

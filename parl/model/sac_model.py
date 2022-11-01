@@ -77,7 +77,6 @@ class SACTorchModel(TorchModelV2, nn.Module):
         )
         nn.Module.__init__(self)
 
-
         if isinstance(action_space, Discrete):
             self.action_dim = action_space.n
             self.discrete = True
@@ -117,8 +116,10 @@ class SACTorchModel(TorchModelV2, nn.Module):
         else:
             self.twin_q_net = None
 
-        self.log_alpha = nn.Parameter(torch.tensor(
-            np.log(initial_alpha), dtype=torch.float32), requires_grad=True)
+        self.log_alpha = nn.Parameter(
+            torch.tensor(np.log(initial_alpha), dtype=torch.float32),
+            requires_grad=True
+        )
 
         # Auto-calculate the target entropy.
         if target_entropy is None or target_entropy == "auto":
@@ -132,7 +133,9 @@ class SACTorchModel(TorchModelV2, nn.Module):
                 target_entropy = -np.prod(action_space.shape)
 
         self.target_entropy = nn.Parameter(
-            torch.tensor(target_entropy, dtype=torch.float32), requires_grad=False)
+            torch.tensor(target_entropy, dtype=torch.float32),
+            requires_grad=False
+        )
 
     @override(TorchModelV2)
     def forward(
@@ -275,33 +278,6 @@ class SACTorchModel(TorchModelV2, nn.Module):
         Returns:
             TensorType: Distribution inputs for sampling actions.
         """
-
-        # def concat_obs_if_necessary(obs: TensorStructType):
-        #     """Concat model outs if they come as original tuple observations."""
-        #     if isinstance(obs, (list, tuple)):
-        #         obs = torch.cat(obs, dim=-1)
-        #     elif isinstance(obs, dict):
-        #         obs = torch.cat(
-        #             [
-        #                 torch.unsqueeze(val, 1) if len(val.shape) == 1 else val
-        #                 for val in tree.flatten(obs.values())
-        #             ],
-        #             dim=-1,
-        #         )
-        #     return obs
-
-        # if state_in is None:
-        #     state_in = []
-
-        # if isinstance(model_out, dict) and "obs" in model_out:
-        #     # Model outs may come as original Tuple observations
-        #     if isinstance(self.action_model.obs_space, Box):
-        #         model_out["obs"] = concat_obs_if_necessary(model_out["obs"])
-        #     return self.action_model(model_out, state_in, seq_lens)
-        # else:
-        #     if isinstance(self.action_model.obs_space, Box):
-        #         model_out = concat_obs_if_necessary(model_out)
-        #     return self.action_model({"obs": model_out}, state_in, seq_lens)
 
         return self.action_model(model_out)
 

@@ -54,10 +54,7 @@ class Config:
         num_gpus = 1 if self.use_gpu else 0
         return num_cpus, num_gpus
 
-
-def main(_config):
-    config = Config(**_config)
-
+def generate_algo_config(config: Config):
     class CPUInitCallback(DefaultCallbacks):
         def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
             # ============ driver worker multi-thread ==========
@@ -83,7 +80,7 @@ def main(_config):
         rollout_fragment_length=config.rollout_fragment_length,
         # no_done_at_end=True,
         horizon=1000,
-        soft_horizon=False,
+        # soft_horizon=False,
     )
     sac_config = sac_config.training(
         # grad_clip=config.grad_clip,
@@ -143,6 +140,13 @@ def main(_config):
     #     extra_python_environs_for_worker={"OMP_NUM_THREADS": str(config.num_cpus_for_rollout_worker)}
     # )
     sac_config = sac_config.to_dict()
+
+    return sac_config
+
+def main(_config):
+    config = Config(**_config)
+
+    sac_config = generate_algo_config(config)
 
     num_cpus, num_gpus = config.resources()
 
