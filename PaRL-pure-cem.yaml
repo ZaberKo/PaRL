@@ -37,7 +37,7 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: es
+evolver_algo: cem
 ea_config:
   # CEM hyperparam
   elite_fraction: 0.5
@@ -107,4 +107,4 @@ tuner_config:
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 10000
+    training_iteration: 50000

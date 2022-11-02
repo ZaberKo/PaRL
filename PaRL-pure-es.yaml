@@ -107,4 +107,4 @@ tuner_config:
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    training_iteration: 10000
+    training_iteration: 50000
