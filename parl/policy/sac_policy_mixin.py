@@ -35,11 +35,20 @@ class SACEvolveMixin:
             self.params_shape[name] = param.size()
             self.num_evolve_params += param.numel()
 
+    def _filter(self, state_dict: ModelWeights):
+        new_state_dict={}
+        for name, param in state_dict.items():
+            if "LayerNorm_" in name:
+                continue
+            new_state_dict[name] = param
+
+        return new_state_dict 
+
     def get_evolution_weights(self) -> ModelWeights:
         # only need learnable weights in policy(actor)
         state_dict = dict(self.model.action_model.named_parameters())
 
-        return convert_to_numpy(state_dict)
+        return convert_to_numpy(self._filter(state_dict))
 
     def set_evolution_weights(self, weights: ModelWeights):
         state_dict = convert_to_torch_tensor(weights)
