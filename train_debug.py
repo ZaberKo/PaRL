@@ -28,6 +28,10 @@ def main(config):
 
     trainer=PaRL(config=config)
 
+    policy=trainer.get_policy()
+    state_dict=policy.get_evolution_weights()
+
+
     for i in trange(10000):
         res = trainer.train()
         print(f"======= iter {i+1} ===========")

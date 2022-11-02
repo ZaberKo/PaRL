@@ -7,8 +7,8 @@ import torch
 
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
-from ray.rllib.algorithms.td3 import TD3Config
-from parl.td3 import TD3Mod
+
+from parl.td3 import TD3Mod, TD3ConfigMod
 from parl.env_config import mujoco_config
 
 
@@ -68,7 +68,7 @@ def generate_algo_config(config: Config):
                         for w in algorithm.workers.remote_workers()]
             ray.wait(pendings, num_returns=len(pendings))
 
-    td3_config = TD3Config().framework('torch')
+    td3_config = TD3ConfigMod().framework('torch')
     td3_config = td3_config.rollouts(
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,

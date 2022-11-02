@@ -1,6 +1,7 @@
 from parl.parl import PaRL
-from ray.rllib.algorithms.td3 import TD3Config
+
 from parl.policy import TD3Policy
+from parl.td3 import TD3ConfigMod
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
@@ -10,7 +11,7 @@ from ray.rllib.utils.typing import (
 )
 from typing import Optional, Type
 
-class PaRLTD3Config(TD3Config):
+class PaRLTD3Config(TD3ConfigMod):
     def __init__(self, algo_class=None):
         super().__init__(algo_class=algo_class or PaRL_TD3)
 

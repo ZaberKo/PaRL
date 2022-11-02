@@ -1,4 +1,4 @@
-from ray.rllib.algorithms.td3 import TD3
+from ray.rllib.algorithms.td3 import TD3, TD3Config
 from parl.policy.td3_policy import TD3Policy
 
 from ray.rllib.execution.rollout_ops import (
@@ -23,6 +23,22 @@ from ray.rllib.execution.common import (
     LAST_TARGET_UPDATE_TS,
     NUM_TARGET_UPDATES,
 )
+
+class TD3ConfigMod(TD3Config):
+    def __init__(self, algo_class=None):
+        super().__init__(algo_class=algo_class or TD3Mod)
+
+        self.add_actor_layer_norm = False
+
+    def training(
+        self,
+        *,
+        add_actor_layer_norm: bool = None,
+        **kwargs
+    ):
+        super().training(**kwargs)
+        if add_actor_layer_norm is not None:
+            self.add_actor_layer_norm = add_actor_layer_norm
 
 class TD3Mod(TD3):
     def get_default_policy_class(self, config):

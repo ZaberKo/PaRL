@@ -38,7 +38,7 @@ class SACEvolveMixin:
     def _filter(self, state_dict: ModelWeights):
         new_state_dict={}
         for name, param in state_dict.items():
-            if "LayerNorm_" in name:
+            if "LayerNorm" in name:
                 continue
             new_state_dict[name] = param
 

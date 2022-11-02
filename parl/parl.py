@@ -11,14 +11,19 @@ from parl.sac import SACConfigMod
 
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
-# from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
 
-from ray.rllib.utils.actors import create_colocated_actors
-from ray.rllib.utils.replay_buffers.utils import update_priorities_in_replay_buffer
 from ray.rllib.utils import merge_dicts
 from ray.rllib.utils.metrics.learner_info import LearnerInfoBuilder
 from ray.tune.execution.placement_groups import PlacementGroupFactory
 
+
+from parl.rollout import synchronous_parallel_sample, flatten_batches
+from parl.learner_thread import MultiGPULearnerThread
+from parl.ea import NeuroEvolution, CEM, ES, GA
+from parl.policy import SACPolicy
+
+from ray.rllib.policy import Policy
+from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
     LAST_TARGET_UPDATE_TS,
     NUM_AGENT_STEPS_SAMPLED,
@@ -29,13 +34,6 @@ from ray.rllib.utils.metrics import (
     SYNCH_WORKER_WEIGHTS_TIMER,
     TARGET_NET_UPDATE_TIMER,
 )
-from parl.rollout import synchronous_parallel_sample, flatten_batches
-from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA
-from parl.policy import SACPolicy
-
-from ray.rllib.policy import Policy
-from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import (
     ResultDict,
     AlgorithmConfigDict,
@@ -78,6 +76,10 @@ class PaRLConfig(SACConfigMod):
             "actor_learning_rate": 3e-4,
             "critic_learning_rate": 3e-4,
             "entropy_learning_rate": 3e-4,
+        })
+
+        self.policy_model_config.update({
+            "add_layer_norm": True
         })
 
         self.episodes_per_worker = 1

@@ -25,7 +25,7 @@ from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.framework import try_import_torch
-from ray.rllib.algorithms.ddpg.utils import make_ddpg_models, validate_spaces
+from ray.rllib.algorithms.ddpg.utils import validate_spaces
 
 from typing import List, Type, Union, Dict, Tuple, Optional, Any
 from ray.rllib.policy import Policy, TorchPolicy
@@ -46,7 +46,7 @@ def l2_loss(x: TensorType) -> TensorType:
     return 0.5 * torch.sum(torch.pow(x, 2.0))
 
 
-def make_ddpg_models(policy: Policy) -> ModelV2:
+def make_td3_models(policy: Policy) -> ModelV2:
     num_outputs = int(np.product(policy.observation_space.shape))
     model = ModelCatalog.get_model_v2(
         obs_space=policy.observation_space,
@@ -62,7 +62,7 @@ def make_ddpg_models(policy: Policy) -> ModelV2:
         critic_hiddens=policy.config["critic_hiddens"],
         twin_q=policy.config["twin_q"],
         add_layer_norm=(
-            policy.config["exploration_config"].get("type") == "ParameterNoise"
+            policy.config["add_actor_layer_norm"]
         ),
     )
 
@@ -80,7 +80,7 @@ def make_ddpg_models(policy: Policy) -> ModelV2:
         critic_hiddens=policy.config["critic_hiddens"],
         twin_q=policy.config["twin_q"],
         add_layer_norm=(
-            policy.config["exploration_config"].get("type") == "ParameterNoise"
+            policy.config["add_actor_layer_norm"]
         ),
     )
 
@@ -118,7 +118,7 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
     def make_model_and_action_dist(
         self,
     ) -> Tuple[ModelV2, Type[TorchDistributionWrapper]]:
-        model = make_ddpg_models(self)
+        model = make_td3_models(self)
 
         distr_class = TorchDeterministic
         return model, distr_class

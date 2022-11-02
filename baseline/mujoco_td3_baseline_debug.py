@@ -6,7 +6,7 @@ import ray
 import torch
 
 
-from ray.rllib.algorithms.td3 import TD3Config
+
 from parl.td3 import TD3Mod
 from parl.env_config import mujoco_config
 
