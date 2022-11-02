@@ -102,19 +102,19 @@ class SACTorchModel(TorchModelV2, nn.Module):
         )
 
         # Build the Q-network(s).
-        self.q_net = self.build_q_model(
+        self.q_model = self.build_q_model(
             num_inputs=q_ins,
             num_outputs=q_outs,
             model_config=q_model_config
         )
         if twin_q:
-            self.twin_q_net = self.build_q_model(
+            self.twin_q_model = self.build_q_model(
                 num_inputs=q_ins,
                 num_outputs=q_outs,
                 model_config=q_model_config
             )
         else:
-            self.twin_q_net = None
+            self.twin_q_model = None
 
         self.log_alpha = nn.Parameter(
             torch.tensor(np.log(initial_alpha), dtype=torch.float32),
@@ -225,7 +225,7 @@ class SACTorchModel(TorchModelV2, nn.Module):
         Returns:
             TensorType: Q-values tensor of shape [BATCH_SIZE, 1].
         """
-        return self._get_q_value(model_out, actions, self.q_net)
+        return self._get_q_value(model_out, actions, self.q_model)
 
     def get_twin_q_values(
         self, model_out: TensorType, actions: Optional[TensorType] = None
@@ -244,7 +244,7 @@ class SACTorchModel(TorchModelV2, nn.Module):
         Returns:
             TensorType: Q-values tensor of shape [BATCH_SIZE, 1].
         """
-        return self._get_q_value(model_out, actions, self.twin_q_net)
+        return self._get_q_value(model_out, actions, self.twin_q_model)
 
     def _get_q_value(self, model_out, actions, net):
         # Continuous case -> concat actions to model_out.
@@ -289,6 +289,6 @@ class SACTorchModel(TorchModelV2, nn.Module):
     def q_variables(self):
         """Return the list of variables for Q / twin Q nets."""
 
-        return list(self.q_net.parameters()) + (
-            list(self.twin_q_net.parameters()) if self.twin_q_net else []
+        return list(self.q_model.parameters()) + (
+            list(self.twin_q_model.parameters()) if self.twin_q_model else []
         )
