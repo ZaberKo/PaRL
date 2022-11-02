@@ -120,12 +120,13 @@ class CEM(NeuroEvolution):
         self.sync_pop_weights()
 
     def _evolve_pop_only(self, fitnesses):
+        fitnesses = np.asarray(fitnesses)
         orders = fitnesses.argsort()[::-1]
         elite_ids = orders[:(self.num_elites+1)]
 
-        # target_weights = self.get_target_weights()
-        # # record target_weights_flat to calc the distance between pop mean
-        # self.target_weights_flat = self.flatten_weights(target_weights)
+        target_weights = self.get_target_weights()
+        # record target_weights_flat to calc the distance between pop mean
+        self.target_weights_flat = self.flatten_weights(target_weights)
 
         pop_flat = self.pop_flat
 
