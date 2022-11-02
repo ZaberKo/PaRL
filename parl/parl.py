@@ -1,8 +1,6 @@
 from tqdm import trange
 import logging
 import copy
-import platform
-import math
 import numpy as np
 
 import ray
@@ -38,25 +36,14 @@ from parl.policy import SACPolicy
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
-from ray.exceptions import GetTimeoutError, RayActorError, RayError
 from ray.rllib.utils.typing import (
     ResultDict,
     AlgorithmConfigDict,
-    PartialAlgorithmConfigDict,
-    EnvType
+    PartialAlgorithmConfigDict
 )
-from ray.tune.logger import Logger
 from typing import (
-    Callable,
-    Container,
-    DefaultDict,
-    Dict,
-    List,
     Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
+    Type
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +90,7 @@ class PaRLConfig(SACConfigMod):
             # "rollout_fragment_length": 1
         }
 
+        self.evolver_algo = 'cem'
         self.ea_config = {
             "elite_fraction": 0.5,
             "noise_decay_coeff": 0.95,
@@ -117,7 +105,6 @@ class PaRLConfig(SACConfigMod):
         self.normalize_actions = True
         self.policy_delay = 1
         self.tune_alpha = True
-        self.evolver_algo = 'cem'
 
         # learner thread config
         self.num_multi_gpu_tower_stacks = 8
