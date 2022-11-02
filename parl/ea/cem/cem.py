@@ -34,9 +34,8 @@ class CEM(NeuroEvolution):
 
         self.pop_flat = np.zeros((self.pop_size, self.num_params))
 
-
         # static weights
-        num_elites=self.num_elites+1 # include target
+        num_elites = self.num_elites+1  # include target
         _ws = np.log(1+num_elites)/np.arange(1, num_elites+1)
         self.ws = _ws/_ws.sum()
 
@@ -85,6 +84,7 @@ class CEM(NeuroEvolution):
     def _evolve(self, fitnesses, target_fitness):
         self._evolve_target_compete_pop(fitnesses, target_fitness)
         # self._evolve_target_always_first(fitnesses, target_fitness)
+        # self._evolve_pop_only(fitnesses)
 
     def _evolve_target_compete_pop(self, fitnesses, target_fitness):
         fitnesses.append(target_fitness)
@@ -96,12 +96,12 @@ class CEM(NeuroEvolution):
         # record target_weights_flat to calc the distance between pop mean
         self.target_weights_flat = self.flatten_weights(target_weights)
 
-        pop_flat=np.concatenate([
+        pop_flat = np.concatenate([
             self.pop_flat,
             np.expand_dims(self.target_weights_flat, axis=0)
         ])
 
-        elites=pop_flat[elite_ids]
+        elites = pop_flat[elite_ids]
 
         # update mean
         mean = np.dot(self.ws, elites)
@@ -119,8 +119,35 @@ class CEM(NeuroEvolution):
         self.generate_pop()
         self.sync_pop_weights()
 
+    def _evolve_pop_only(self, fitnesses):
+        orders = fitnesses.argsort()[::-1]
+        elite_ids = orders[:(self.num_elites+1)]
 
-    def _evolve_target_always_first(self, fitnesses, target_fitness):
+        # target_weights = self.get_target_weights()
+        # # record target_weights_flat to calc the distance between pop mean
+        # self.target_weights_flat = self.flatten_weights(target_weights)
+
+        pop_flat = self.pop_flat
+
+        elites = pop_flat[elite_ids]
+
+        # update mean
+        mean = np.dot(self.ws, elites)
+
+        # update variance
+        variance = np.full(self.num_params, self.noise) + np.dot(
+            self.ws, np.power(elites-self.mean, 2))
+
+        self.mean = mean
+        self.variance = variance
+        self.noise = self.noise_decay_coeff*self.noise + \
+            (1-self.noise_decay_coeff)*self.noise_end
+
+        # generate new pop
+        self.generate_pop()
+        self.sync_pop_weights()
+
+    def _evolve_target_always_first(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
         orders = fitnesses.argsort()
         elite_ids = orders[:self.num_elites]
@@ -130,7 +157,7 @@ class CEM(NeuroEvolution):
         self.target_weights_flat = self.flatten_weights(target_weights)
 
         # update mean
-        elites=np.concatenate([
+        elites = np.concatenate([
             np.expand_dims(self.target_weights_flat, axis=0),
             self.pop_flat[elite_ids],
         ])
@@ -163,12 +190,19 @@ class CEM(NeuroEvolution):
 
         return data
 
-    def set_pop_weights(self, worker: RolloutWorker=None):
+    def set_pop_weights(self, worker: RolloutWorker = None):
         # Note: use for local worker
         if worker is None:
             worker = self.target_worker.local_worker()
-        
+
         self.set_evolution_weights(
             worker=worker,
             weights=self.unflatten_weights(self.mean)
         )
+
+class CEMPure(CEM):
+    @override(NeuroEvolution)
+    def _evolve(self, fitnesses, target_fitness):
+        # self._evolve_target_compete_pop(fitnesses, target_fitness)
+        # self._evolve_target_always_first(fitnesses, target_fitness)
+        self._evolve_pop_only(fitnesses)

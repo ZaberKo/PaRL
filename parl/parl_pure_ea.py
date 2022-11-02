@@ -33,7 +33,7 @@ from ray.rllib.utils.metrics import (
 )
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA
+from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
 from parl.policy import SACPolicy
 from parl.parl import PaRLConfig
 
@@ -70,7 +70,8 @@ FITNESS = "fitness"
 evolver_algo = {
     "es": ES,
     "ga": GA,
-    "cem": CEM
+    "cem": CEM,
+    "cem-pure": CEMPure
 }
 
 
