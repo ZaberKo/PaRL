@@ -32,6 +32,7 @@ from ray.rllib.utils.metrics import (
 )
 from ray.rllib.utils.typing import (
     ResultDict,
+    AlgorithmConfigDict,
     PartialAlgorithmConfigDict
 )
 
@@ -74,7 +75,7 @@ class PaRL:
 
     @override(Algorithm)
     def setup(self, config: PartialAlgorithmConfigDict):
-        super().setup(config)
+        super(PaRL, self).setup(config)
 
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
@@ -273,14 +274,16 @@ class PaRL:
 
         fitnesses = []
         for episodes in sample_batches:
+            total_rewards = 0 
             for episode in episodes:
-                total_rewards = episode[SampleBatch.REWARDS].sum()
-                fitnesses.append(total_rewards)
+                total_rewards += episode[SampleBatch.REWARDS].sum()
+            total_rewards /= len(episodes)
+            fitnesses.append(total_rewards)
         return fitnesses
 
     @override(Algorithm)
     def _compile_iteration_results(self, *args, **kwargs):
-        result = super()._compile_iteration_results(*args, **kwargs)
+        result = super(PaRL, self)._compile_iteration_results(*args, **kwargs)
         # add learner thread metrics
         result["info"].update(
             self._learner_thread.stats()
@@ -291,7 +294,24 @@ class PaRL:
             )
         return result
 
+    @override(Algorithm)
+    def validate_config(self, config: AlgorithmConfigDict) -> None:
+        super(PaRL, self).validate_config(config)
 
+        if config["framework"] != "torch":
+            raise ValueError("Current only support PyTorch!")
+
+        # if config["num_workers"] <= 0:
+        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
+
+        # if config["pop_size"] <= 0:
+        #     raise ValueError("`pop_size` must be >=1")
+        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
+        #     raise ValueError(
+        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
+
+        if config["evaluation_interval"] <= 0:
+            raise ValueError("evaluation_interval must >=1")
 
     @classmethod
     @override(Algorithm)

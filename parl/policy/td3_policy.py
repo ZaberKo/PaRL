@@ -185,11 +185,11 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         # clip the action to avoid out of bound.
         if not hasattr(self, "action_space_low_tensor"):
             self.action_space_low_tensor = torch.from_numpy(
-                self.action_space.low,
+                self.action_space.low.copy(),
             ).to(dtype=torch.float32, device=self.device)
         if not hasattr(self, "action_space_high_tensor"):
             self.action_space_high_tensor = torch.from_numpy(
-                self.action_space.high,
+                self.action_space.high.copy(),
             ).to(dtype=torch.float32, device=self.device)
 
         critic_loss = calc_critic_loss(self, model, dist_class, train_batch)

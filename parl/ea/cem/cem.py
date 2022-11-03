@@ -122,7 +122,7 @@ class CEM(NeuroEvolution):
     def _evolve_pop_only(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
         orders = fitnesses.argsort()[::-1]
-        elite_ids = orders[:(self.num_elites+1)]
+        elite_ids = orders[:self.num_elites+1] # use more elite for match self.ws
 
         target_weights = self.get_target_weights()
         # record target_weights_flat to calc the distance between pop mean

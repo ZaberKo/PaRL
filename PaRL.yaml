@@ -75,7 +75,7 @@ policy_delay: 1
 tune_alpha: true
 
 # ======== training process config =============
-min_train_timesteps_per_iteration: *train_batch_size
+min_train_timesteps_per_iteration: 0
 
 num_multi_gpu_tower_stacks: 8
 learner_queue_size: 16

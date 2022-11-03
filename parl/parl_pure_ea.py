@@ -3,8 +3,14 @@ import logging
 
 from ray.rllib.evaluation.worker_set import WorkerSet
 # from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
+from ray.tune.execution.placement_groups import PlacementGroupFactory
 
+from parl.ea import NeuroEvolution
+from parl.parl_sac import PaRL_SAC
+from parl.parl_td3 import PaRL_TD3
 
+from ray.rllib.algorithms import Algorithm
+from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
     LAST_TARGET_UPDATE_TS,
     NUM_AGENT_STEPS_SAMPLED,
@@ -16,19 +22,17 @@ from ray.rllib.utils.metrics import (
     TARGET_NET_UPDATE_TIMER,
 )
 from parl.rollout import synchronous_parallel_sample, flatten_batches
-from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
-from parl.parl_sac import PaRL_SAC
-from parl.parl_td3 import PaRL_TD3
+
+
 from parl.parl import (
     evolver_algo,
-    NUM_SAMPLES_ADDED_TO_QUEUE,
-    SYNCH_POP_WORKER_WEIGHTS_TIMER,
-    FITNESS
+    PaRL
 )
 from ray.rllib.utils import merge_dicts
 
 from ray.rllib.utils.typing import (
     ResultDict,
+    AlgorithmConfigDict,
     PartialAlgorithmConfigDict
 )
 
@@ -38,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class PaRL_PureEA:
     def setup(self, config: PartialAlgorithmConfigDict):
-        super().setup(config)
+        super(PaRL, self).setup(config)
 
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
@@ -149,6 +153,18 @@ class PaRL_PureEA:
 
         # Return all collected metrics for the iteration.
         return train_results
+    
+    
+    
+    def _compile_iteration_results(self, *args, **kwargs):
+        result = super(PaRL, self)._compile_iteration_results(*args, **kwargs)
+        
+        if self.pop_size > 0:
+            result["info"].update(
+                self.evolver.stats()
+            )
+        return result
+
 
 class PaRL_SAC_PureEA(PaRL_PureEA, PaRL_SAC):
     pass

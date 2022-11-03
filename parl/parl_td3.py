@@ -58,26 +58,6 @@ class PaRLTD3Config(TD3ConfigMod):
         self.framework("torch")
 
 class PaRL_TD3(PaRL, TD3):
-    @override(TD3)
-    def validate_config(self, config: AlgorithmConfigDict) -> None:
-        super().validate_config(config)
-
-        if config["framework"] != "torch":
-            raise ValueError("Current only support PyTorch!")
-
-        # if config["num_workers"] <= 0:
-        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
-
-        # if config["pop_size"] <= 0:
-        #     raise ValueError("`pop_size` must be >=1")
-        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
-        #     raise ValueError(
-        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
-
-        if config["evaluation_interval"] <= 0:
-            raise ValueError("evaluation_interval must >=1")
-
-
     @classmethod
     @override(TD3)
     def get_default_config(cls) -> AlgorithmConfigDict:

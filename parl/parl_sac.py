@@ -114,25 +114,6 @@ class PaRLSACConfig(SACConfigMod):
 
 
 class PaRL_SAC(PaRL, SAC):
-    @override(SAC)
-    def validate_config(self, config: AlgorithmConfigDict) -> None:
-        super().validate_config(config)
-
-        if config["framework"] != "torch":
-            raise ValueError("Current only support PyTorch!")
-
-        # if config["num_workers"] <= 0:
-        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
-
-        # if config["pop_size"] <= 0:
-        #     raise ValueError("`pop_size` must be >=1")
-        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
-        #     raise ValueError(
-        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
-
-        if config["evaluation_interval"] <= 0:
-            raise ValueError("evaluation_interval must >=1")
-
     @classmethod
     @override(SAC)
     def get_default_config(cls) -> AlgorithmConfigDict:
@@ -143,55 +124,3 @@ class PaRL_SAC(PaRL, SAC):
         self, config: PartialAlgorithmConfigDict
     ) -> Optional[Type[Policy]]:
         return SACPolicy
-
-    @classmethod
-    @override(Algorithm)
-    def default_resource_request(cls, config):
-        config = dict(cls.get_default_config(), **config)
-        pop_config = merge_dicts(config, config["pop_config"])
-        eval_config = merge_dicts(config, config["evaluation_config"])
-
-        bundles = []
-
-        # driver worker
-        bundles += [
-            {
-                "CPU": config["num_cpus_for_driver"],
-                "GPU": 0 if config["_fake_gpus"] else config["num_gpus"]
-            }
-        ]
-
-        # target_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": config["num_cpus_per_worker"],
-                "GPU": config["num_gpus_per_worker"],
-                **config["custom_resources_per_worker"],
-            }
-            for _ in range(config["num_workers"])
-        ]
-
-        # pop_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": pop_config["num_cpus_per_worker"],
-                "GPU": pop_config["num_gpus_per_worker"],
-                **pop_config["custom_resources_per_worker"],
-            }
-            for _ in range(config["pop_size"])
-        ]
-
-        # eval_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": eval_config["num_cpus_per_worker"],
-                "GPU": eval_config["num_gpus_per_worker"],
-                **eval_config["custom_resources_per_worker"],
-            }
-            for _ in range(config["evaluation_num_workers"])
-        ]
-
-        return PlacementGroupFactory(bundles=bundles, strategy=config.get("placement_strategy", "PACK"))
