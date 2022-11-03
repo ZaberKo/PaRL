@@ -19,7 +19,7 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA
+from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
 from parl.policy import SACPolicy
 
 from ray.rllib.policy import Policy
@@ -54,7 +54,8 @@ FITNESS = "fitness"
 evolver_algo = {
     "es": ES,
     "ga": GA,
-    "cem": CEM
+    "cem": CEM,
+    "cem-pure": CEMPure
 }
 
 
