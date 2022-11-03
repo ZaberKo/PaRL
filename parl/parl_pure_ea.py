@@ -1,25 +1,9 @@
 from tqdm import trange
 import logging
-import copy
-import platform
-import math
-import numpy as np
 
-import ray
-
-from ray.rllib.algorithms import Algorithm
-from ray.rllib.algorithms.sac import SAC
-from parl.sac import SACConfigMod
-
-from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
 # from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
 
-from ray.rllib.utils.actors import create_colocated_actors
-from ray.rllib.utils.replay_buffers.utils import update_priorities_in_replay_buffer
-from ray.rllib.utils import merge_dicts
-from ray.rllib.utils.metrics.learner_info import LearnerInfoBuilder
-from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from ray.rllib.utils.metrics import (
     LAST_TARGET_UPDATE_TS,
@@ -32,56 +16,27 @@ from ray.rllib.utils.metrics import (
     TARGET_NET_UPDATE_TIMER,
 )
 from parl.rollout import synchronous_parallel_sample, flatten_batches
-from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
-from parl.policy import SACPolicy
-from parl.parl import PaRLConfig
+from parl.parl_sac import PaRL_SAC
+from parl.parl_td3 import PaRL_TD3
+from parl.parl import (
+    evolver_algo,
+    NUM_SAMPLES_ADDED_TO_QUEUE,
+    SYNCH_POP_WORKER_WEIGHTS_TIMER,
+    FITNESS
+)
+from ray.rllib.utils import merge_dicts
 
-from ray.rllib.policy import Policy
-from ray.rllib.utils.annotations import override
-from ray.exceptions import GetTimeoutError, RayActorError, RayError
 from ray.rllib.utils.typing import (
     ResultDict,
-    AlgorithmConfigDict,
-    PartialAlgorithmConfigDict,
-    EnvType
+    PartialAlgorithmConfigDict
 )
-from ray.tune.logger import Logger
-from typing import (
-    Callable,
-    Container,
-    DefaultDict,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
-)
+
 
 logger = logging.getLogger(__name__)
 
-NUM_SAMPLES_ADDED_TO_QUEUE = "num_samples_added_to_queue"
-SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
 
-FITNESS = "fitness"
-
-evolver_algo = {
-    "es": ES,
-    "ga": GA,
-    "cem": CEM,
-    "cem-pure": CEMPure
-}
-
-
-class PaRL_PureEA(SAC):
-    _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
-        ["pop_config", "ea_config", "extra_python_environs_for_driver"]
-    _override_all_subkeys_if_type_changes = SAC._override_all_subkeys_if_type_changes + \
-        ["pop_config", "ea_config"]
-
-    @override(Algorithm)
+class PaRL_PureEA:
     def setup(self, config: PartialAlgorithmConfigDict):
         super().setup(config)
 
@@ -104,7 +59,6 @@ class PaRL_PureEA(SAC):
 
         self.num_updates_since_last_target_update = 0
 
-    @override(SAC)
     def training_step(self) -> ResultDict:
         train_batch_size = self.config["train_batch_size"]
         local_worker = self.workers.local_worker()
@@ -196,100 +150,8 @@ class PaRL_PureEA(SAC):
         # Return all collected metrics for the iteration.
         return train_results
 
+class PaRL_SAC_PureEA(PaRL_PureEA, PaRL_SAC):
+    pass
 
-
-    def _calc_fitness(self, sample_batches):
-        if self.pop_size != len(sample_batches):
-            raise ValueError(
-                "sample_batches must contains `pop_size` workers' batches")
-
-        fitnesses = []
-        for episodes in sample_batches:
-            for episode in episodes:
-                total_rewards = episode[SampleBatch.REWARDS].sum()
-                fitnesses.append(total_rewards)
-        return fitnesses
-
-
-
-    @override(SAC)
-    def validate_config(self, config: AlgorithmConfigDict) -> None:
-        super().validate_config(config)
-
-        if config["framework"] != "torch":
-            raise ValueError("Current only support PyTorch!")
-
-        # if config["num_workers"] <= 0:
-        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
-
-        # if config["pop_size"] <= 0:
-        #     raise ValueError("`pop_size` must be >=1")
-        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
-        #     raise ValueError(
-        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
-
-        if config["evaluation_interval"] <= 0:
-            raise ValueError("evaluation_interval must >=1")
-
-    @classmethod
-    @override(SAC)
-    def get_default_config(cls) -> AlgorithmConfigDict:
-        return PaRLConfig().to_dict()
-
-    @override(SAC)
-    def get_default_policy_class(
-        self, config: PartialAlgorithmConfigDict
-    ) -> Optional[Type[Policy]]:
-        return SACPolicy
-
-    @classmethod
-    @override(Algorithm)
-    def default_resource_request(cls, config):
-        config = dict(cls.get_default_config(), **config)
-        pop_config = merge_dicts(config, config["pop_config"])
-        eval_config = merge_dicts(config, config["evaluation_config"])
-
-        bundles = []
-
-        # driver worker
-        bundles += [
-            {
-                "CPU": config["num_cpus_for_driver"],
-                "GPU": 0 if config["_fake_gpus"] else config["num_gpus"]
-            }
-        ]
-
-        # target_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": config["num_cpus_per_worker"],
-                "GPU": config["num_gpus_per_worker"],
-                **config["custom_resources_per_worker"],
-            }
-            for _ in range(config["num_workers"])
-        ]
-
-        # pop_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": pop_config["num_cpus_per_worker"],
-                "GPU": pop_config["num_gpus_per_worker"],
-                **pop_config["custom_resources_per_worker"],
-            }
-            for _ in range(config["pop_size"])
-        ]
-
-        # eval_workers
-        bundles += [
-            {
-                # RolloutWorkers.
-                "CPU": eval_config["num_cpus_per_worker"],
-                "GPU": eval_config["num_gpus_per_worker"],
-                **eval_config["custom_resources_per_worker"],
-            }
-            for _ in range(config["evaluation_num_workers"])
-        ]
-
-        return PlacementGroupFactory(bundles=bundles, strategy=config.get("placement_strategy", "PACK"))
+class PaRL_TD3_PureEA(PaRL_PureEA, PaRL_TD3):
+    pass

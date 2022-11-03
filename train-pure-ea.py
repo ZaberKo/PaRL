@@ -12,7 +12,7 @@ from ray.rllib.algorithms import Algorithm
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
-from parl import PaRLConfig, PaRL_PureEA
+from parl import PaRLSACConfig, PaRL_SAC_PureEA
 from parl.env_config import mujoco_config
 
 
@@ -56,7 +56,7 @@ def main(config):
                         for w in algorithm.workers.remote_workers()]
             ray.wait(pendings, num_returns=len(pendings))
 
-    default_config = PaRLConfig()
+    default_config = PaRLSACConfig()
     default_config = default_config.callbacks(CPUInitCallback)
     # default_config = default_config.python_environment(
     #     extra_python_environs_for_driver={"OMP_NUM_THREADS": str(8)},
@@ -78,7 +78,7 @@ def main(config):
     default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
 
-    trainer_resources = PaRL_PureEA.default_resource_request(
+    trainer_resources = PaRL_SAC_PureEA.default_resource_request(
         merged_config).required_resources
 
     ray.init(
@@ -88,7 +88,7 @@ def main(config):
         include_dashboard=True
     )
     tuner = Tuner(
-        PaRL_PureEA,
+        PaRL_SAC_PureEA,
         param_space=merged_config,
         tune_config=tune_config,
         run_config=run_config

@@ -2,6 +2,7 @@ from parl.parl import PaRL
 
 from parl.policy import TD3Policy
 from parl.td3 import TD3ConfigMod
+from ray.rllib.algorithms.td3 import TD3
 
 from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
@@ -54,13 +55,33 @@ class PaRLTD3Config(TD3ConfigMod):
 
         self.framework("torch")
 
-class PaRL_TD3(PaRL):
+class PaRL_TD3(PaRL, TD3):
+    @override(TD3)
+    def validate_config(self, config: AlgorithmConfigDict) -> None:
+        super().validate_config(config)
+
+        if config["framework"] != "torch":
+            raise ValueError("Current only support PyTorch!")
+
+        # if config["num_workers"] <= 0:
+        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
+
+        # if config["pop_size"] <= 0:
+        #     raise ValueError("`pop_size` must be >=1")
+        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
+        #     raise ValueError(
+        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
+
+        if config["evaluation_interval"] <= 0:
+            raise ValueError("evaluation_interval must >=1")
+
+
     @classmethod
-    @override(PaRL)
+    @override(TD3)
     def get_default_config(cls) -> AlgorithmConfigDict:
         return PaRLTD3Config().to_dict()
 
-    @override(PaRL)
+    @override(TD3)
     def get_default_policy_class(
         self, config: PartialAlgorithmConfigDict
     ) -> Optional[Type[Policy]]:

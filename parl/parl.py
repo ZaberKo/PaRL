@@ -3,11 +3,9 @@ import logging
 import copy
 import numpy as np
 
-import ray
+
 
 from ray.rllib.algorithms import Algorithm
-from ray.rllib.algorithms.sac import SAC
-from parl.sac import SACConfigMod
 
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
@@ -19,10 +17,8 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA
-from parl.policy import SACPolicy
+from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
 
-from ray.rllib.policy import Policy
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
     LAST_TARGET_UPDATE_TS,
@@ -36,12 +32,7 @@ from ray.rllib.utils.metrics import (
 )
 from ray.rllib.utils.typing import (
     ResultDict,
-    AlgorithmConfigDict,
     PartialAlgorithmConfigDict
-)
-from typing import (
-    Optional,
-    Type
 )
 
 logger = logging.getLogger(__name__)
@@ -54,82 +45,9 @@ FITNESS = "fitness"
 evolver_algo = {
     "es": ES,
     "ga": GA,
-    "cem": CEM
+    "cem": CEM,
+    "cem-pure": CEMPure
 }
-
-
-class PaRLConfig(SACConfigMod):
-    def __init__(self, algo_class=None):
-        super().__init__(algo_class=algo_class or PaRL)
-
-        self.store_buffer_in_checkpoints = False
-        self.replay_buffer_config = {
-            "type": "MultiAgentReplayBuffer",
-            "capacity": int(1e6),
-            "learning_starts": 10000,
-            # "no_local_replay_buffer": True,
-            "replay_buffer_shards_colocated_with_driver": False,
-            # "num_replay_buffer_shards": 1
-        }
-
-        self.optimization.update({
-            "actor_learning_rate": 3e-4,
-            "critic_learning_rate": 3e-4,
-            "entropy_learning_rate": 3e-4,
-        })
-
-        self.policy_model_config.update({
-            "add_layer_norm": True
-        })
-
-        self.episodes_per_worker = 1
-
-        # EA config
-        self.pop_size = 10
-        self.pop_config = {
-            # "explore": True,
-            # "batch_mode": "complete_episodes",
-            # "rollout_fragment_length": 1
-        }
-
-        self.evolver_algo = 'cem'
-        self.ea_config = {
-            "elite_fraction": 0.5,
-            "noise_decay_coeff": 0.95,
-            "noise_init": 1e-3,
-            "noise_end": 1e-5
-        }
-
-        # training config
-        self.n_step = 1
-        self.initial_alpha = 1.0
-        self.tau = 0.005
-        self.normalize_actions = True
-        self.policy_delay = 1
-        self.tune_alpha = True
-
-        # learner thread config
-        self.num_multi_gpu_tower_stacks = 8
-        self.learner_queue_size = 16
-        self.num_data_load_threads = 16
-
-        self.target_network_update_freq = 1  # unit: iteration
-
-        # reporting
-        self.metrics_episode_collection_timeout_s = 60.0
-        self.metrics_num_episodes_for_smoothing = 5
-        self.min_time_s_per_iteration = 0
-        self.min_sample_timesteps_per_iteration = 0
-        self.min_train_timesteps_per_iteration = 0
-
-        # default_resources
-        self.num_cpus_per_worker = 1
-        self.num_envs_per_worker = 1
-        self.num_cpus_for_local_worker = 1
-        self.num_gpus_per_worker = 0
-
-        self.framework("torch")
-
 
 def make_learner_thread(local_worker, config):
     logger.info(
@@ -148,10 +66,10 @@ def make_learner_thread(local_worker, config):
     return learner_thread
 
 
-class PaRL(SAC):
-    _allow_unknown_subkeys = SAC._allow_unknown_subkeys + \
+class PaRL:
+    _allow_unknown_subkeys = Algorithm._allow_unknown_subkeys + \
         ["pop_config", "ea_config", "extra_python_environs_for_driver"]
-    _override_all_subkeys_if_type_changes = SAC._override_all_subkeys_if_type_changes + \
+    _override_all_subkeys_if_type_changes = Algorithm._override_all_subkeys_if_type_changes + \
         ["pop_config", "ea_config"]
 
     @override(Algorithm)
@@ -212,7 +130,7 @@ class PaRL(SAC):
 
         self.num_updates_since_last_target_update = 0
 
-    @override(SAC)
+    @override(Algorithm)
     def training_step(self) -> ResultDict:
         train_batch_size = self.config["train_batch_size"]
         local_worker = self.workers.local_worker()
@@ -373,35 +291,7 @@ class PaRL(SAC):
             )
         return result
 
-    @override(SAC)
-    def validate_config(self, config: AlgorithmConfigDict) -> None:
-        super().validate_config(config)
 
-        if config["framework"] != "torch":
-            raise ValueError("Current only support PyTorch!")
-
-        # if config["num_workers"] <= 0:
-        #     raise ValueError("`num_workers` for PaRL must be >= 1!")
-
-        # if config["pop_size"] <= 0:
-        #     raise ValueError("`pop_size` must be >=1")
-        # elif round(config["pop_size"]*config["ea_config"]["elite_fraction"]) <= 0:
-        #     raise ValueError(
-        #         f'elite_fraction={config["elite_fraction"]} is too small with current pop_size={config["pop_size"]}.')
-
-        if config["evaluation_interval"] <= 0:
-            raise ValueError("evaluation_interval must >=1")
-
-    @classmethod
-    @override(SAC)
-    def get_default_config(cls) -> AlgorithmConfigDict:
-        return PaRLConfig().to_dict()
-
-    @override(SAC)
-    def get_default_policy_class(
-        self, config: PartialAlgorithmConfigDict
-    ) -> Optional[Type[Policy]]:
-        return SACPolicy
 
     @classmethod
     @override(Algorithm)

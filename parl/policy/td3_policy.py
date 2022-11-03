@@ -11,6 +11,7 @@ from .td3_loss import (
     calc_actor_loss,
     calc_critic_loss
 )
+from parl.utils import disable_grad
 
 
 from ray.rllib.models import ModelCatalog
@@ -83,6 +84,7 @@ def make_td3_models(policy: Policy) -> ModelV2:
             policy.config["add_actor_layer_norm"]
         ),
     )
+    disable_grad(policy.target_model.parameters())
 
     return model
 
