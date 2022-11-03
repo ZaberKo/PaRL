@@ -37,7 +37,7 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: cem
+evolver_algo: cem-pure
 ea_config:
   # CEM hyperparam
   elite_fraction: 0.5
@@ -95,7 +95,7 @@ compress_observations: false # also effect rollout transmission
 
 # ============= checkpoint & stopper config ===============
 tuner_config:
-  num_samples: 1
+  num_samples: 3
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
