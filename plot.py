@@ -47,22 +47,9 @@ def load_json_line(path):
                 data.append(res["evaluation"]["hist_stats"]["episode_reward"])
     return x, data
 
-def plot(path, r=0):
-    df = pd.read_csv(os.path.join(path, "progress.txt"), delimiter="\t")
-    plt.plot(dpi=300, figsize=(300, 600))
-    smoothed_return = smooth(df["AverageTestEpRet"], r)
-    smoothed_std = smooth(df["StdTestEpRet"], r)
-    plt.plot(df["Epoch"], smoothed_return,
-             label="return", lw=0.4)
-    plt.fill_between(df["Epoch"], smoothed_return-smoothed_std,
-                     smoothed_return+smoothed_std, alpha=0.2)
-    plt.legend()
-    plt.show()
-
 
 def plot_all(path, r=0):
-
-    plt.plot(dpi=300, figsize=(300, 600))
+    plt.figure(dpi=300, figsize=(9, 9))
     eval_return_arr = []
     for exp_path in Path(path).expanduser().iterdir():
         if not exp_path.is_dir():
@@ -88,13 +75,9 @@ def plot_all(path, r=0):
     # plt.legend()
     plt.show()
 
-    plt.plot(dpi=300, figsize=(300, 600))
+    plt.figure(dpi=300, figsize=(9, 9))
     plt.plot(x[:_min_len], smoothed_avg_return)
     plt.show()
-
-
-
-
 
 
 #%%

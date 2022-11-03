@@ -40,6 +40,8 @@ class TD3ConfigMod(TD3Config):
         if add_actor_layer_norm is not None:
             self.add_actor_layer_norm = add_actor_layer_norm
 
+        return self
+
 class TD3Mod(TD3):
     def get_default_policy_class(self, config):
         return TD3Policy

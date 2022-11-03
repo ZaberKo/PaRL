@@ -25,7 +25,7 @@ def plot(
 
 # %%
 plot(
-    noise_init=1e-3,
+    noise_init=1,
     noise_end=1e-5,
     noise_decay_coeff=0.995,
     test_num=1000

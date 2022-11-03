@@ -12,6 +12,9 @@ from ray.rllib.algorithms import Algorithm
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
+from tqdm import trange
+from ray.rllib.utils.debug import summarize
+
 from parl import PaRL_TD3, PaRLTD3Config
 from parl.env_config import mujoco_config
 
@@ -43,19 +46,6 @@ class CPUInitCallback(DefaultCallbacks):
 def main(config):
     tuner_config = config.pop("tuner_config")
 
-    num_samples = tuner_config.get("num_samples", 1)
-    tune_config = TuneConfig(
-        num_samples=num_samples
-    )
-
-    run_config = RunConfig(
-        stop=tuner_config["stopper"],
-        checkpoint_config=CheckpointConfig(
-            num_to_keep=None,  # save all checkpoints
-            checkpoint_frequency=tuner_config["checkpoint_freq"]
-        )
-    )
-
     default_config = PaRLTD3Config()
     # default_config = default_config.callbacks(CPUInitCallback)
     # default_config = default_config.python_environment(
@@ -71,9 +61,6 @@ def main(config):
         env=env, 
         # env_config=env_config
         )
-    default_config=default_config.training(
-        add_actor_layer_norm=True
-    )
 
     default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
@@ -82,22 +69,24 @@ def main(config):
         merged_config).required_resources
 
     ray.init(
-        num_cpus=int(trainer_resources["CPU"]*num_samples),
+        num_cpus=int(trainer_resources["CPU"]),
         num_gpus=1,
         local_mode=False,
         include_dashboard=True
     )
-    tuner = Tuner(
-        PaRL_TD3,
-        param_space=merged_config,
-        tune_config=tune_config,
-        run_config=run_config
-    )
+    trainer=PaRL_TD3(config=merged_config)
 
-    result_grid = tuner.fit()
-    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join("results", exp_name), "wb") as f:
-        cloudpickle.dump(result_grid, f)
+    # policy=trainer.get_policy()
+    # state_dict=policy.get_evolution_weights()
+
+
+    for i in trange(10000):
+        res = trainer.train()
+        print(f"======= iter {i+1} ===========")
+        del res["config"]
+        del res["hist_stats"]
+        print(summarize(res))
+        print("+"*20)
 
     time.sleep(20)
 

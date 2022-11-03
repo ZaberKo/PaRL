@@ -8,6 +8,9 @@ import torch
 from parl.sac import SAC_Parallel, SACConfigMod
 from parl.env_config import mujoco_config
 
+from tqdm import trange
+from ray.rllib.utils.debug import summarize
+
 from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
@@ -35,8 +38,7 @@ def main(_config):
 
     trainer = SAC_Parallel(config=sac_config)
 
-    from tqdm import trange
-    from ray.rllib.utils.debug import summarize
+
     for i in trange(10000):
         res = trainer.train()
         print(f"======= iter {i+1} ===========")

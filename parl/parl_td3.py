@@ -16,6 +16,8 @@ class PaRLTD3Config(TD3ConfigMod):
     def __init__(self, algo_class=None):
         super().__init__(algo_class=algo_class or PaRL_TD3)
 
+        self.add_actor_layer_norm = True
+        self.episodes_per_worker = 1
         # EA config
         self.pop_size = 10
         self.pop_config = {

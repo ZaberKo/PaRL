@@ -28,8 +28,8 @@ def main(config):
 
     trainer=PaRL(config=config)
 
-    policy=trainer.get_policy()
-    state_dict=policy.get_evolution_weights()
+    # policy=trainer.get_policy()
+    # state_dict=policy.get_evolution_weights()
 
 
     for i in trange(10000):
@@ -48,7 +48,7 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL-es.yaml")
+    parser.add_argument("--config_file", type=str, default="PaRL.yaml")
     args = parser.parse_args()
 
     yaml=YAML(typ='safe')
