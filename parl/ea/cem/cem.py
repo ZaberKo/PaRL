@@ -83,7 +83,7 @@ class CEM(NeuroEvolution):
     @override(NeuroEvolution)
     def _evolve(self, fitnesses, target_fitness):
         self._evolve_target_compete_pop(fitnesses, target_fitness)
-        # self._evolve_target_always_first(fitnesses, target_fitness)
+        # self._evolve_target_always_first(fitnesses)
         # self._evolve_pop_only(fitnesses)
 
     def _evolve_target_compete_pop(self, fitnesses, target_fitness):
