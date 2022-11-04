@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import ray
 import tree
+import time
 import importlib
 import contextlib
 
@@ -86,3 +87,10 @@ def disable_grad_ctx(params: list[torch.Tensor]):
             param.requires_grad = flag
 
 
+@contextlib.contextmanager
+def print_time():
+    start_time=time.time()
+    try:
+        yield 
+    finally:
+        print(f"elapse time: {time.time()-start_time}")

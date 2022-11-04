@@ -26,7 +26,8 @@ class MultiGPULearnerThread(threading.Thread):
     def __init__(
             self,
             local_worker: RolloutWorker,
-            target_network_update_freq = 1,
+            target_network_update_freq: int = 1,
+            batch_bulk: int = 1,
             num_multi_gpu_tower_stacks: int = 1,
             learner_queue_size: int = 16,
             num_data_load_threads: int = 16,
@@ -73,12 +74,12 @@ class MultiGPULearnerThread(threading.Thread):
             loader_thread.start()
             self.loader_threads.append(loader_thread)
 
-
+        self.batch_bulk = batch_bulk
         # target model update metrics
         self.target_network_update_freq = target_network_update_freq
         self.num_updates_since_last_target_update = 0
         self.num_target_updates = 0
-        self.target_net_update_timer= _Timer()
+        self.target_net_update_timer = _Timer()
 
     def _update_target_networks(self):
         # Update target network every `target_network_update_freq` training update.
@@ -91,7 +92,6 @@ class MultiGPULearnerThread(threading.Thread):
                 )
             self.num_updates_since_last_target_update = 0
             self.num_target_updates += 1
-
 
     def run(self) -> None:
         # Switch on eager mode if configured.
@@ -111,42 +111,48 @@ class MultiGPULearnerThread(threading.Thread):
                     # return _NextValueNotReady()
 
         num_steps_trained_this_iter = 0
-        with self.grad_timer:
-            # Use LearnerInfoBuilder as a unified way to build the final
-            # results dict from `learn_on_loaded_batch` call(s).
-            # This makes sure results dicts always have the same structure
-            # no matter the setup (multi-GPU, multi-agent, minibatch SGD,
-            # tf vs torch).
-            learner_info_builder = LearnerInfoBuilder(
-                num_devices=len(self.devices))
 
-            for pid in self.policy_map.keys():
-                # Not a policy-to-train.
-                if not self.local_worker.is_policy_to_train(pid):
-                    continue
-                policy = self.policy_map[pid]
 
-                logger.debug("== sgd update for {} ==".format(pid))
 
-                # perform train_batch_size batch update
-                default_policy_results = policy.learn_on_loaded_batch(
-                    offset=0, buffer_index=buffer_idx
-                )
-                learner_info_builder.add_learn_on_batch_results(
-                    default_policy_results)
-                self.weights_updated = True
-                num_steps_trained_this_iter += (
-                    policy.get_num_samples_loaded_into_buffer(buffer_idx)
-                )
-            
-            self.learner_info = learner_info_builder.finalize()
+        for i in range(self.batch_bulk):
+            with self.grad_timer:
+                # Use LearnerInfoBuilder as a unified way to build the final
+                # results dict from `learn_on_loaded_batch` call(s).
+                # This makes sure results dicts always have the same structure
+                # no matter the setup (multi-GPU, multi-agent, minibatch SGD,
+                # tf vs torch).
+                learner_info_builder = LearnerInfoBuilder(
+                    num_devices=len(self.devices))
 
-        self._update_target_networks()
+                for pid in self.policy_map.keys():
+                    # Not a policy-to-train.
+                    if not self.local_worker.is_policy_to_train(pid):
+                        continue
+                    policy = self.policy_map[pid]
+
+                    logger.debug("== sgd update for {} ==".format(pid))
+
+                    # perform train_batch_size batch update
+                    default_policy_results = policy.learn_on_loaded_batch(
+                        offset=i*policy.config["train_batch_size"],
+                        buffer_index=buffer_idx
+                    )
+                    learner_info_builder.add_learn_on_batch_results(
+                        default_policy_results)
+                    self.weights_updated = True
+                    num_steps_trained_this_iter += min(
+                        policy.get_num_samples_loaded_into_buffer(buffer_idx), 
+                        policy.config["train_batch_size"]
+                    )
+
+                self.learner_info = learner_info_builder.finalize()
+
+            self._update_target_networks()
+            self.outqueue.put((num_steps_trained_this_iter, self.learner_info))
+
+        self.learner_queue_size.push(self.inqueue.qsize())
 
         self.idle_tower_stacks.put(buffer_idx)
-
-        self.outqueue.put((num_steps_trained_this_iter, self.learner_info))
-        self.learner_queue_size.push(self.inqueue.qsize())
 
     def stats(self) -> Dict:
         """Add internal metrics to a result dict."""

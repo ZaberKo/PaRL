@@ -61,8 +61,6 @@ class PaRL_PureEA:
             self.evolver: NeuroEvolution = evolver_cls(
                 self.ea_config, self.pop_workers, self.workers.local_worker())
 
-        self.num_updates_since_last_target_update = 0
-
     def training_step(self) -> ResultDict:
         train_batch_size = self.config["train_batch_size"]
         local_worker = self.workers.local_worker()

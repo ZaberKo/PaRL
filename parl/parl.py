@@ -1,8 +1,8 @@
 from tqdm import trange
 import logging
 import copy
+import math
 import numpy as np
-
 
 
 from ray.rllib.algorithms import Algorithm
@@ -47,6 +47,7 @@ evolver_algo = {
     "cem-pure": CEMPure
 }
 
+
 def make_learner_thread(local_worker, config):
     logger.info(
         "Enabling multi-GPU mode, {} GPUs, {} parallel tower-stacks".format(
@@ -56,13 +57,56 @@ def make_learner_thread(local_worker, config):
 
     learner_thread = MultiGPULearnerThread(
         local_worker=local_worker,
-        target_network_update_freq = config["target_network_update_freq"],
+        target_network_update_freq=config["target_network_update_freq"],
+        batch_bulk=config["batch_bulk"],
         num_multi_gpu_tower_stacks=config["num_multi_gpu_tower_stacks"],
         learner_queue_size=config["learner_queue_size"],
         num_data_load_threads=config["num_data_load_threads"]
     )
 
     return learner_thread
+
+
+class PaRLBaseConfig:
+    def __init__(self) -> None:
+        self.episodes_per_worker = 1
+        # EA config
+        self.pop_size = 10
+        self.pop_config = {
+            "explore": False,
+            "batch_mode": "complete_episodes",
+            "rollout_fragment_length": 1
+        }
+        self.evolver_algo = 'cem'
+        self.ea_config = {
+            "elite_fraction": 0.5,
+            "noise_decay_coeff": 0.95,
+            "noise_init": 1e-3,
+            "noise_end": 1e-5
+        }
+
+        # learner thread config
+        self.num_multi_gpu_tower_stacks = 8
+        self.learner_queue_size = 16
+        self.num_data_load_threads = 16
+        self.batch_bulk = 10
+
+        self.target_network_update_freq = 1  # unit: iteration
+
+        # reporting
+        self.metrics_episode_collection_timeout_s = 60.0
+        self.metrics_num_episodes_for_smoothing = 5
+        self.min_time_s_per_iteration = 0
+        self.min_sample_timesteps_per_iteration = 0
+        self.min_train_timesteps_per_iteration = 0
+
+        # default_resources
+        self.num_cpus_per_worker = 1
+        self.num_envs_per_worker = 1
+        self.num_cpus_for_local_worker = 1
+        self.num_gpus_per_worker = 0
+
+        self.framework("torch")
 
 
 class PaRL:
@@ -127,8 +171,6 @@ class PaRL:
             self.workers.local_worker(), self.config)
         self._learner_thread.start()
 
-        self.num_updates_since_last_target_update = 0
-
     @override(Algorithm)
     def training_step(self) -> ResultDict:
         train_batch_size = self.config["train_batch_size"]
@@ -174,10 +216,13 @@ class PaRL:
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
         num_train_batches = round(ts/10)
+        batch_bulk = self.config["batch_bulk"]
+
         # print("load train batch phase")
-        for _ in trange(num_train_batches):
+        for _ in trange(math.ceil(num_train_batches/batch_bulk)):
             logger.info(f"add {num_train_batches} batches to learner thread")
-            train_batch = self.local_replay_buffer.sample(train_batch_size)
+            train_batch = self.local_replay_buffer.sample(
+                train_batch_size*batch_bulk)
 
             # replay buffer learning start size not meet
             if train_batch is None or len(train_batch) == 0:
@@ -189,8 +234,6 @@ class PaRL:
             self._counters[NUM_SAMPLES_ADDED_TO_QUEUE] += (
                 batch.agent_steps() if self._by_agent_steps else batch.count
             )
-
-
 
         # Update replay buffer priorities.
         # update_priorities_in_replay_buffer(
@@ -252,7 +295,6 @@ class PaRL:
         self._counters[NUM_AGENT_STEPS_TRAINED] += num_agent_steps_trained
         return final_learner_info
 
-
     def _calc_fitness(self, sample_batches):
         if self.pop_size != len(sample_batches):
             raise ValueError(
@@ -260,7 +302,7 @@ class PaRL:
 
         fitnesses = []
         for episodes in sample_batches:
-            total_rewards = 0 
+            total_rewards = 0
             for episode in episodes:
                 total_rewards += episode[SampleBatch.REWARDS].sum()
             total_rewards /= len(episodes)
