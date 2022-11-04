@@ -17,7 +17,7 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
+from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure, HybridES
 
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
@@ -36,7 +36,7 @@ from ray.rllib.utils.typing import (
 logger = logging.getLogger(__name__)
 
 NUM_SAMPLES_ADDED_TO_QUEUE = "num_samples_added_to_queue"
-SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
+# SYNCH_POP_WORKER_WEIGHTS_TIMER = "synch_pop"
 
 FITNESS = "fitness"
 
@@ -44,7 +44,8 @@ evolver_algo = {
     "es": ES,
     "ga": GA,
     "cem": CEM,
-    "cem-pure": CEMPure
+    "cem-pure": CEMPure,
+    "hybrid-es": HybridES
 }
 
 
@@ -89,7 +90,7 @@ class PaRLBaseConfig:
         self.num_multi_gpu_tower_stacks = 8
         self.learner_queue_size = 16
         self.num_data_load_threads = 16
-        self.batch_bulk = 10
+        self.batch_bulk = 1
 
         self.target_network_update_freq = 1  # unit: iteration
 
@@ -187,12 +188,11 @@ class PaRL:
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        ts = 0  # total sample steps in the iteration
+        target_ts = sum([batch.env_steps() for batch in flatten_batches(target_sample_batches)])
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
-            ts += batch.env_steps()
             # Store new samples in the replay buffer
             # Use deprecated add_batch() to support old replay buffers for now
             self.local_replay_buffer.add(batch)
@@ -208,18 +208,17 @@ class PaRL:
             target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
             ) for episode in flatten_batches(target_sample_batches)])
             self.evolver.evolve(fitnesses, target_fitness=target_fitness)
-            # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
-            #     # set pop workers with new generated indv weights
-            #     self.evolver.sync_pop_weights()
 
         # step 3: sample batches from replay buffer and place them on learner queue
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
-        num_train_batches = round(ts/10)
+        num_train_batches = target_ts
         batch_bulk = self.config["batch_bulk"]
 
+        real_num_train_batches = math.ceil(num_train_batches/batch_bulk)*batch_bulk
+
         # print("load train batch phase")
-        for _ in trange(math.ceil(num_train_batches/batch_bulk)):
+        for _ in range(math.ceil(num_train_batches/batch_bulk)):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(
                 train_batch_size*batch_bulk)
@@ -244,7 +243,7 @@ class PaRL:
         # )
 
         # step 5: retrieve train_results from learner thread and update target network
-        train_results = self._retrieve_trained_results(num_train_batches)
+        train_results = self._retrieve_trained_results(real_num_train_batches)
         if self.pop_size > 0:
             train_results.update({
                 "ea_results": self.evolver.get_iteration_results()
@@ -268,7 +267,7 @@ class PaRL:
         num_agent_steps_trained = 0
         # Loop through output queue and update our counts.
         # for _ in range(self._learner_thread.outqueue.qsize()):
-        for _ in trange(num_train_batches):
+        for _ in range(num_train_batches):
             if self._learner_thread.is_alive():
                 (
                     env_steps,

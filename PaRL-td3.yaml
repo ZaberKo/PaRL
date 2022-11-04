@@ -70,6 +70,7 @@ min_train_timesteps_per_iteration: 0
 num_multi_gpu_tower_stacks: 8
 learner_queue_size: 16
 num_data_load_threads: 8
+batch_bulk: 1
 
 target_network_update_freq: 1 # unit: iteration
 
