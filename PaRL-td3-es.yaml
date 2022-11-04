@@ -21,9 +21,6 @@ batch_mode: complete_episodes
 rollout_fragment_length: 1
 episodes_per_worker: 1
 explore: true
-exploration_config:
-  type: StochasticSampling
-  # random_timesteps: 10000
 
 # ============= pop actors config ==============
 pop_size: 10 # number of pop_workers
@@ -32,18 +29,23 @@ pop_config:
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
-  exploration_config:
-    type: StochasticSampling
-  #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: cem
+evolver_algo: es
 ea_config:
   # CEM hyperparam
-  elite_fraction: 0.5
-  noise_decay_coeff: 0.995
-  noise_init: !!float 1e-3
-  noise_end: !!float 1e-5
+  # elite_fraction: 0.5
+  # noise_decay_coeff: 0.95
+  # noise_init: !!float 1e-3
+  # noise_end: !!float 1e-5
+  # GA
+  # migration_freq: 10
+  # migration_start: 0
+  # elite_fraction: 0.2
+  # crossover_prob: 0
+  # mutation_prob: 0.9
+  # ES
+  noise_stdev: 0.05
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
@@ -60,19 +62,15 @@ evaluation_config:
 # ============ training hyperparameter config =============
 train_batch_size: &train_batch_size 256
 
-optimization:
-  actor_learning_rate: !!float 3e-4
-  critic_learning_rate: !!float 3e-4
-  entropy_learning_rate: !!float 3e-4
+actor_lr: !!float 1e-3
+critic_lr: !!float 1e-3
 
 # lr_schedule: [[0, !!float 3e-4],[50000000, !!float 1e-8]]
 gamma: 0.99
-initial_alpha: 1.0
 tau: 0.005
 
-# delay actor update freq
-policy_delay: 1
-tune_alpha: true
+policy_delay: 2
+
 
 # ======== training process config =============
 min_train_timesteps_per_iteration: 0

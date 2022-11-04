@@ -91,6 +91,8 @@ class TD3Learning(TorchPolicyCustomUpdate):
     def __init__(self):
         self.global_trainstep = 0
 
+        self.last_actor_gnorm = None
+
     def _compute_grad_and_apply(self, train_batch):
         grad_info = {}
         # calc gradient and updates
@@ -117,7 +119,10 @@ class TD3Learning(TorchPolicyCustomUpdate):
                 grad_info["actor_gnorm"] = clip_and_record_grad_norm(
                     self.actor_optim
                 )
+                self.last_actor_gnorm = grad_info["actor_gnorm"]
                 self.actor_optim.step()
+        else:
+            grad_info["actor_gnorm"] = self.last_actor_gnorm
 
         self.global_trainstep += 1
 
