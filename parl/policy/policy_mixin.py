@@ -102,7 +102,6 @@ class TorchPolicyCustomUpdate:
             device_batch = self._loaded_batches[buffer_index][0][offset: offset + device_batch_size]
 
         # Callback handling.
-        batch_fetches = {}
         custom_metrics = {}
         self.callbacks.on_learn_on_batch(
             policy=self, train_batch=device_batch, result=custom_metrics
@@ -125,7 +124,7 @@ class TorchPolicyCustomUpdate:
             }
         )
 
-        return batch_fetches
+        return fetches
 
 
 class TorchPolicyMod2:
