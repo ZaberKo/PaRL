@@ -43,6 +43,10 @@ class TD3ConfigMod(TD3Config):
         return self
 
 class TD3Mod(TD3):
+    @classmethod
+    def get_default_config(cls) -> AlgorithmConfigDict:
+        return TD3ConfigMod().to_dict()
+
     def get_default_policy_class(self, config):
         return TD3Policy
 
