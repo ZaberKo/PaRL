@@ -11,6 +11,9 @@ from ray.rllib.utils.metrics.window_stat import WindowStat
 from ray.rllib.utils.framework import try_import_tf
 from .utils import timer_to_ms
 
+from ray.rllib.utils.metrics import (
+    NUM_TARGET_UPDATES
+)
 from typing import Dict
 
 tf1, tf, tfv = try_import_tf()
@@ -23,6 +26,7 @@ class MultiGPULearnerThread(threading.Thread):
     def __init__(
             self,
             local_worker: RolloutWorker,
+            target_network_update_freq = 1,
             num_multi_gpu_tower_stacks: int = 1,
             learner_queue_size: int = 16,
             num_data_load_threads: int = 16,
@@ -69,6 +73,26 @@ class MultiGPULearnerThread(threading.Thread):
             loader_thread.start()
             self.loader_threads.append(loader_thread)
 
+
+        # target model update metrics
+        self.target_network_update_freq = target_network_update_freq
+        self.num_updates_since_last_target_update = 0
+        self.num_target_updates = 0
+        self.target_net_update_timer= _Timer()
+
+    def _update_target_networks(self):
+        # Update target network every `target_network_update_freq` training update.
+        self.num_updates_since_last_target_update += 1
+        if self.num_updates_since_last_target_update > self.target_network_update_freq:
+            with self.target_net_update_timer:
+                to_update = self.local_worker.get_policies_to_train()
+                self.local_worker.foreach_policy_to_train(
+                    lambda p, pid: pid in to_update and p.update_target()
+                )
+            self.num_updates_since_last_target_update = 0
+            self.num_target_updates += 1
+
+
     def run(self) -> None:
         # Switch on eager mode if configured.
         if self.local_worker.policy_config.get("framework") in ["tf2", "tfe"]:
@@ -114,8 +138,10 @@ class MultiGPULearnerThread(threading.Thread):
                 num_steps_trained_this_iter += (
                     policy.get_num_samples_loaded_into_buffer(buffer_idx)
                 )
-
+            
             self.learner_info = learner_info_builder.finalize()
+
+        self._update_target_networks()
 
         self.idle_tower_stacks.put(buffer_idx)
 
@@ -132,7 +158,9 @@ class MultiGPULearnerThread(threading.Thread):
                 "learner_load_time_ms": timer_to_ms(self.load_timer),
                 "learner_load_wait_time_ms": timer_to_ms(self.load_wait_timer),
                 "learner_dequeue_time_ms": timer_to_ms(self.queue_timer),
+                "target_net_update_time_ms": timer_to_ms(self.target_net_update_timer)
             },
+            NUM_TARGET_UPDATES: self.num_target_updates,
         }
 
         return data
@@ -154,9 +182,9 @@ class _MultiGPULoaderThread(threading.Thread):
 
     def run(self) -> None:
         while True:
-            self._step()
+            self.step()
 
-    def _step(self) -> None:
+    def step(self) -> None:
         s = self.multi_gpu_learner_thread
         policy_map = s.policy_map
 

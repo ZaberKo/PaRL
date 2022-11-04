@@ -21,14 +21,11 @@ from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure
 
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
-    LAST_TARGET_UPDATE_TS,
     NUM_AGENT_STEPS_SAMPLED,
     NUM_ENV_STEPS_SAMPLED,
     NUM_AGENT_STEPS_TRAINED,
     NUM_ENV_STEPS_TRAINED,
-    NUM_TARGET_UPDATES,
     SYNCH_WORKER_WEIGHTS_TIMER,
-    TARGET_NET_UPDATE_TIMER,
 )
 from ray.rllib.utils.typing import (
     ResultDict,
@@ -59,6 +56,7 @@ def make_learner_thread(local_worker, config):
 
     learner_thread = MultiGPULearnerThread(
         local_worker=local_worker,
+        target_network_update_freq = config["target_network_update_freq"],
         num_multi_gpu_tower_stacks=config["num_multi_gpu_tower_stacks"],
         learner_queue_size=config["learner_queue_size"],
         num_data_load_threads=config["num_data_load_threads"]
@@ -161,11 +159,23 @@ class PaRL:
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
         }
 
+        # step 4: apply NE
+        # Note: put EA ahead for correct target_weights
+        if self.pop_size > 0:
+            fitnesses = self._calc_fitness(pop_sample_batches)
+            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
+            ) for episode in flatten_batches(target_sample_batches)])
+            self.evolver.evolve(fitnesses, target_fitness=target_fitness)
+            # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
+            #     # set pop workers with new generated indv weights
+            #     self.evolver.sync_pop_weights()
+
         # step 3: sample batches from replay buffer and place them on learner queue
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
         num_train_batches = round(ts/10)
-        for _ in range(num_train_batches):
+        # print("load train batch phase")
+        for _ in trange(num_train_batches):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(train_batch_size)
 
@@ -180,15 +190,7 @@ class PaRL:
                 batch.agent_steps() if self._by_agent_steps else batch.count
             )
 
-        # step 4: apply NE
-        if self.pop_size > 0:
-            fitnesses = self._calc_fitness(pop_sample_batches)
-            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
-            ) for episode in flatten_batches(target_sample_batches)])
-            self.evolver.evolve(fitnesses, target_fitness=target_fitness)
-            # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
-            #     # set pop workers with new generated indv weights
-            #     self.evolver.sync_pop_weights()
+
 
         # Update replay buffer priorities.
         # update_priorities_in_replay_buffer(
@@ -199,7 +201,7 @@ class PaRL:
         # )
 
         # step 5: retrieve train_results from learner thread and update target network
-        train_results = self._process_trained_results()
+        train_results = self._retrieve_trained_results(num_train_batches)
         if self.pop_size > 0:
             train_results.update({
                 "ea_results": self.evolver.get_iteration_results()
@@ -214,20 +216,21 @@ class PaRL:
         # Return all collected metrics for the iteration.
         return train_results
 
-    def _process_trained_results(self) -> ResultDict:
+    def _retrieve_trained_results(self, num_train_batches) -> ResultDict:
         # Get learner outputs/stats from output queue.
         # and update the target network
+        # print("backgroud training phase")
         learner_infos = []
         num_env_steps_trained = 0
         num_agent_steps_trained = 0
         # Loop through output queue and update our counts.
-        for _ in range(self._learner_thread.outqueue.qsize()):
+        # for _ in range(self._learner_thread.outqueue.qsize()):
+        for _ in trange(num_train_batches):
             if self._learner_thread.is_alive():
                 (
                     env_steps,
                     learner_results,
                 ) = self._learner_thread.outqueue.get()
-                self._update_target_networks()
                 num_env_steps_trained += env_steps
                 num_agent_steps_trained += env_steps
                 if learner_results:
@@ -249,23 +252,6 @@ class PaRL:
         self._counters[NUM_AGENT_STEPS_TRAINED] += num_agent_steps_trained
         return final_learner_info
 
-    def _update_target_networks(self):
-        local_worker = self.workers.local_worker()
-        # Update target network every `target_network_update_freq` training update.
-        self.num_updates_since_last_target_update += 1
-        if self.num_updates_since_last_target_update >= self.config["target_network_update_freq"]:
-            with self._timers[TARGET_NET_UPDATE_TIMER]:
-                to_update = local_worker.get_policies_to_train()
-                local_worker.foreach_policy_to_train(
-                    lambda p, pid: pid in to_update and p.update_target()
-                )
-            self.num_updates_since_last_target_update = 0
-            self._counters[NUM_TARGET_UPDATES] += 1
-            self._counters[LAST_TARGET_UPDATE_TS] = self._counters[
-                NUM_AGENT_STEPS_TRAINED
-                if self._by_agent_steps
-                else NUM_ENV_STEPS_TRAINED
-            ]
 
     def _calc_fitness(self, sample_batches):
         if self.pop_size != len(sample_batches):
