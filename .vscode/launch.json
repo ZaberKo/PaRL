@@ -5,20 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "train_debug",
+            "name": "Train PaRL",
             "type": "python",
             "request": "launch",
-            "program": "train_debug.py",
+            "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
-            "name": "train",
-            "type": "python",
-            "request": "launch",
-            "program": "train.py",
-            "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": false,
+            "args": ["--debug"]
         },
         {
             "name": "Python: Current File",

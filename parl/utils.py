@@ -1,4 +1,4 @@
-from typing import Iterable, List
+
 import copy
 import numpy as np
 import ray
@@ -12,10 +12,11 @@ from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.framework import try_import_torch
 
 
-from typing import Dict, Optional
+from typing import List
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.algorithms import Algorithm
 from ray.rllib.utils.typing import TensorType, TensorStructType
 from ray.rllib.policy import Policy
-from ray.rllib.evaluation import SampleBatch
 from ray.util.timer import _Timer
 torch, _ = try_import_torch()
 
@@ -94,3 +95,26 @@ def print_time():
         yield 
     finally:
         print(f"elapse time: {time.time()-start_time}")
+
+
+class CPUInitCallback(DefaultCallbacks):
+    def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
+        num_cpus_for_local_worker = algorithm.config["num_cpus_for_local_worker"]
+        num_cpus_for_rollout_worker = algorithm.config["num_cpus_per_worker"]
+        # ============ driver worker multi-thread ==========
+        # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
+        # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker)
+        # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
+
+
+        torch.set_num_threads(num_cpus_for_local_worker)
+
+        # ============ rollout worker multi-thread ==========
+        def set_rollout_num_threads(worker):
+            torch.set_num_threads(num_cpus_for_rollout_worker)
+
+        pendings = [w.apply.remote(set_rollout_num_threads)
+                    for w in algorithm.workers.remote_workers()]
+        ray.wait(pendings, num_returns=len(pendings))

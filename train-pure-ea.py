@@ -15,6 +15,8 @@ from ray.air import RunConfig, CheckpointConfig
 from parl import PaRLSACConfig, PaRL_SAC_PureEA
 from parl.env_config import mujoco_config
 
+from parl.utils import CPUInitCallback
+
 
 def main(config):
     tuner_config = config.pop("tuner_config")
@@ -31,30 +33,6 @@ def main(config):
             checkpoint_frequency=tuner_config["checkpoint_freq"]
         )
     )
-
-    class CPUInitCallback(DefaultCallbacks):
-        def __init__(self):
-            super().__init__()
-            self.num_cpus_for_local_worker = 4
-            self.num_cpus_for_rollout_worker = 1
-
-        def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
-            # ============ driver worker multi-thread ==========
-            n = int(self.num_cpus_for_local_worker)
-            os.environ["OMP_NUM_THREADS"] = str(n)
-            os.environ["OPENBLAS_NUM_THREADS"] = str(n)
-            os.environ["MKL_NUM_THREADS"] = str(n)
-            os.environ["VECLIB_MAXIMUM_THREADS"] = str(n)
-            os.environ["NUMEXPR_NUM_THREADS"] = str(n)
-            torch.set_num_threads(n)
-
-            # ============ rollout worker multi-thread ==========
-            def set_rollout_num_threads(worker):
-                torch.set_num_threads(self.num_cpus_for_rollout_worker)
-
-            pendings = [w.apply.remote(set_rollout_num_threads)
-                        for w in algorithm.workers.remote_workers()]
-            ray.wait(pendings, num_returns=len(pendings))
 
     default_config = PaRLSACConfig()
     default_config = default_config.callbacks(CPUInitCallback)

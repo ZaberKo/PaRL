@@ -14,47 +14,19 @@ from ray.air import RunConfig, CheckpointConfig
 
 from parl import PaRL_SAC, PaRLSACConfig
 from parl.env_config import mujoco_config
+from parl.utils import CPUInitCallback
+
+from tqdm import trange
+from ray.rllib.utils.debug import summarize
 
 
-class CPUInitCallback(DefaultCallbacks):
-    def __init__(self):
-        super().__init__()
-        self.num_cpus_for_local_worker = 8
-        self.num_cpus_for_rollout_worker = 8
 
-    def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
-        # ============ driver worker multi-thread ==========
-        # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
-        # os.environ["OPENBLAS_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker)
-        # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
-        torch.set_num_threads(self.num_cpus_for_local_worker)
-
-        # ============ rollout worker multi-thread ==========
-        def set_rollout_num_threads(worker):
-            torch.set_num_threads(self.num_cpus_for_rollout_worker)
-
-        pendings = [w.apply.remote(set_rollout_num_threads)
-                    for w in algorithm.workers.remote_workers()]
-        ray.wait(pendings, num_returns=len(pendings))
-
-
-def main(config):
+def main(config, debug=False):
     tuner_config = config.pop("tuner_config")
 
     num_samples = tuner_config.get("num_samples", 1)
-    tune_config = TuneConfig(
-        num_samples=num_samples
-    )
-
-    run_config = RunConfig(
-        stop=tuner_config["stopper"],
-        checkpoint_config=CheckpointConfig(
-            num_to_keep=None,  # save all checkpoints
-            checkpoint_frequency=tuner_config["checkpoint_freq"]
-        )
-    )
+    if debug:
+        num_samples = 1
 
     default_config = PaRLSACConfig()
     # default_config = default_config.callbacks(CPUInitCallback)
@@ -67,12 +39,9 @@ def main(config):
     env: str = config["env"]
     # env_config = mujoco_config.get(
     #     env.split("-")[0], {}).get("Parameterizable-v3", {})
-    default_config= default_config.environment(
-        env=env, 
+    default_config = default_config.environment(
+        env=env,
         # env_config=env_config
-        )
-    default_config=default_config.training(
-        add_actor_layer_norm=True
     )
 
     default_config = default_config.to_dict()
@@ -87,17 +56,47 @@ def main(config):
         local_mode=False,
         include_dashboard=True
     )
-    tuner = Tuner(
-        PaRL_SAC,
-        param_space=merged_config,
-        tune_config=tune_config,
-        run_config=run_config
-    )
 
-    result_grid = tuner.fit()
-    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join("results", exp_name), "wb") as f:
-        cloudpickle.dump(result_grid, f)
+    if debug:
+        merged_config["log_level"] = "DEBUG"
+        trainer = PaRL_SAC(config=merged_config)
+
+        # policy=trainer.get_policy()
+        # state_dict=policy.get_evolution_weights()
+
+        for i in trange(10000):
+            res = trainer.train()
+            print(f"======= iter {i+1} ===========")
+            del res["config"]
+            del res["hist_stats"]
+            print(summarize(res))
+            print("+"*20)
+
+    else:
+        tune_config = TuneConfig(
+            num_samples=num_samples
+        )
+
+        run_config = RunConfig(
+            stop=tuner_config["stopper"],
+            checkpoint_config=CheckpointConfig(
+                num_to_keep=None,  # save all checkpoints
+                checkpoint_frequency=tuner_config["checkpoint_freq"]
+            )
+        )
+
+        tuner = Tuner(
+            PaRL_SAC,
+            param_space=merged_config,
+            tune_config=tune_config,
+            run_config=run_config
+        )
+
+        result_grid = tuner.fit()
+        exp_name = os.path.basename(
+            tuner._local_tuner._experiment_checkpoint_dir)
+        with open(os.path.join("results", exp_name), "wb") as f:
+            cloudpickle.dump(result_grid, f)
 
     time.sleep(20)
 
@@ -106,6 +105,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", type=str, default="PaRL.yaml")
     parser.add_argument("--env", type=str, default=None)
+    parser.add_argument("--evolver_algo", type=str)
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     yaml = YAML(typ='safe')
@@ -113,5 +114,7 @@ if __name__ == "__main__":
         config = yaml.load(f)
     # config=namedtuple('Config',config)(**config)
     if args.env:
-        config["env"]=args.env
-    main(config)
+        config["env"] = args.env
+    if args.evolver_algo:
+        config["evolver_algo"] = args.evolver_algo
+    main(config, args.debug)
