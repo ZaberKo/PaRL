@@ -6,7 +6,7 @@ import ray
 from ray.tune import Tuner,TuneConfig
 from ray.air import RunConfig,CheckpointConfig
 
-from parl import PaRL, PaRLConfig
+from parl import PaRL_SAC, PaRLSACConfig
 
 
 from ray.rllib.utils import merge_dicts
@@ -26,7 +26,7 @@ def main(config):
 
     config["log_level"]="DEBUG"
 
-    trainer=PaRL(config=config)
+    trainer=PaRL_SAC(config=config)
 
     # policy=trainer.get_policy()
     # state_dict=policy.get_evolution_weights()
