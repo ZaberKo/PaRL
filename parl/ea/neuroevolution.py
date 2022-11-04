@@ -30,7 +30,7 @@ class NeuroEvolution:
     def evolve(self, fitnesses, **kwargs):
         self.fitnesses=fitnesses
         with self.evolve_timer:
-            self._evolve(fitnesses, **kwargs)
+            self._evolve(fitnesses.copy(), **kwargs)
 
     def _evolve(self, fitnesses, **kwargs):
         raise NotImplementedError
