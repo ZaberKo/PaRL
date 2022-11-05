@@ -26,7 +26,7 @@ exploration_config:
   # random_timesteps: 10000
 
 # ============= pop actors config ==============
-pop_size: 50 # number of pop_workers
+pop_size: 10 # number of pop_workers
 pop_config:
   explore: false
   num_envs_per_worker: 1
@@ -103,7 +103,7 @@ compress_observations: false # also effect rollout transmission
 
 # ============= checkpoint & stopper config ===============
 tuner_config:
-  num_samples: 1
+  num_samples: 5
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:

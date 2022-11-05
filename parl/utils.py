@@ -99,7 +99,7 @@ def print_time():
 
 class CPUInitCallback(DefaultCallbacks):
     def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
-        num_cpus_for_local_worker = algorithm.config["num_cpus_for_local_worker"]
+        num_cpus_for_local_worker = algorithm.config["num_cpus_for_driver"]
         num_cpus_for_rollout_worker = algorithm.config["num_cpus_per_worker"]
         # ============ driver worker multi-thread ==========
         # os.environ["OMP_NUM_THREADS"]=str(num_cpus_for_local_worker)
