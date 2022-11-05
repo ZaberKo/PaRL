@@ -43,7 +43,7 @@ class FullyConnectedNetwork(nn.Module):
             if add_layer_norm:
                 self._hidden_layers.add_module(
                     f"LayerNorm_{i}",
-                    nn.LayerNorm(size)
+                    nn.LayerNorm(size, elementwise_affine=False)
                 )
             prev_layer_size = size
         

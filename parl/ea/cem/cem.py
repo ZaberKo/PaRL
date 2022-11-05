@@ -90,7 +90,9 @@ class CEM(NeuroEvolution):
         fitnesses.append(target_fitness)
         new_fitnesses = np.asarray(fitnesses)
         orders = new_fitnesses.argsort()[::-1]
-        elite_ids = orders[:(self.num_elites+1)]
+
+        num_elites = self.num_elites+1
+        elite_ids = orders[:num_elites]
 
         target_weights = self.get_target_weights()
         # record target_weights_flat to calc the distance between pop mean
@@ -101,6 +103,7 @@ class CEM(NeuroEvolution):
             np.expand_dims(self.target_weights_flat, axis=0)
         ])
 
+        # aka. parents
         elites = pop_flat[elite_ids]
 
         # update mean
