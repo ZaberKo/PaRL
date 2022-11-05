@@ -18,14 +18,22 @@ def plot(
 
     plt.figure(dpi=300, figsize=(9, 3))
     ax=plt.axes()
-    plt.plot(result)
-    ax.set_ylim(noise_end, noise_init)
+    plt.plot(result, label="var_noise")
+    ax.set_ylim(0, noise_init)
+    plt.legend()
     plt.show()
 
+    plt.figure(dpi=300, figsize=(9, 3))
+    ax=plt.axes()
+    result2= np.sqrt(result)
+    plt.plot(result2, label="std_noise")
+    ax.set_ylim(0, result2[0])
+    plt.legend()
+    plt.show()
 
 # %%
 plot(
-    noise_init=1,
+    noise_init=1e-3,
     noise_end=1e-5,
     noise_decay_coeff=0.995,
     test_num=1000
