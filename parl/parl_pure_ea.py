@@ -46,6 +46,7 @@ class PaRL_PureEA:
 
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
+        self.pop_config["is_pop_worker"] = True
         self.pop_workers = WorkerSet(
             env_creator=self.env_creator,
             validate_env=self.validate_env,

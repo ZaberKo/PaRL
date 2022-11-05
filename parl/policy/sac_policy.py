@@ -155,7 +155,9 @@ def build_sac_model_and_action_dist_fix(
         target_entropy=config["target_entropy"],
     )
 
-    if not config["tune_alpha"]:
+    if config["is_pop_worker"]:
+        disable_grad(model.parameters())
+    elif not config["tune_alpha"]:
         disable_grad([model.log_alpha])
 
     assert isinstance(model, default_model_cls)

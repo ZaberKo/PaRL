@@ -67,6 +67,9 @@ def make_td3_models(policy: Policy) -> ModelV2:
         ),
     )
 
+    if policy.config["is_pop_worker"]:
+        disable_grad(model.parameters())
+
     policy.target_model = ModelCatalog.get_model_v2(
         obs_space=policy.observation_space,
         action_space=policy.action_space,

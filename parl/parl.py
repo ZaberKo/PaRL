@@ -70,6 +70,9 @@ def make_learner_thread(local_worker, config):
 
 class PaRLBaseConfig:
     def __init__(self) -> None:
+        # flag for pop worker:
+        self.is_pop_worker = False
+
         self.episodes_per_worker = 1
         # EA config
         self.pop_size = 10
@@ -122,6 +125,7 @@ class PaRL:
 
         self.pop_size = self.config["pop_size"]
         self.pop_config = merge_dicts(self.config, config["pop_config"])
+        self.pop_config["is_pop_worker"] = True
         self.pop_workers = WorkerSet(
             env_creator=self.env_creator,
             validate_env=self.validate_env,
@@ -201,7 +205,7 @@ class PaRL:
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
         }
 
-        # step 4: apply NE
+        # step 3: apply NE
         # Note: put EA ahead for correct target_weights
         if self.pop_size > 0:
             fitnesses = self._calc_fitness(pop_sample_batches)
@@ -209,7 +213,9 @@ class PaRL:
             ) for episode in flatten_batches(target_sample_batches)])
             self.evolver.evolve(fitnesses, target_fitness=target_fitness)
 
-        # step 3: sample batches from replay buffer and place them on learner queue
+        # step 4: sample batches from replay buffer and place them on learner queue
+        # Note: training and target network update are happened in learner_thread
+
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
         num_train_batches = target_ts
@@ -242,14 +248,14 @@ class PaRL:
         #     train_results,
         # )
 
-        # step 5: retrieve train_results from learner thread and update target network
+        # step 5: retrieve train_results from learner thread
         train_results = self._retrieve_trained_results(real_num_train_batches)
         if self.pop_size > 0:
             train_results.update({
                 "ea_results": self.evolver.get_iteration_results()
             })
 
-        # step 6: sync target agent weights to rollout workers
+        # step 6: sync target agent weights to its rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
         # remote workers.
         with self._timers[SYNCH_WORKER_WEIGHTS_TIMER]:
