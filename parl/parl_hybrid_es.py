@@ -130,8 +130,8 @@ class PaRL_HybridES:
 
         # step 6: generate offsprings
         self.evolver.resync_target_weights()
-        self.generate_pop()
-        self.sync_pop_weights()
+        self.evolver.generate_pop()
+        self.evolver.sync_pop_weights()
 
         # step 7: sync target agent weights to rollout workers
         # Update weights and global_vars - after learning on the local worker - on all

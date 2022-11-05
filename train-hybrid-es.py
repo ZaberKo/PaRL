@@ -20,7 +20,6 @@ from tqdm import trange
 from ray.rllib.utils.debug import summarize
 
 
-
 def main(config, debug=False):
     tuner_config = config.pop("tuner_config")
 
@@ -43,9 +42,10 @@ def main(config, debug=False):
         env=env,
         # env_config=env_config
     )
-    default_config.evolver_algo = "hybrid-es"
+
     default_config = default_config.to_dict()
     merged_config = merge_dicts(default_config, config)
+    merged_config["evolver_algo"] = "hybrid-es"
 
     trainer_resources = PaRL_SAC_HybridES.default_resource_request(
         merged_config).required_resources
@@ -103,7 +103,7 @@ def main(config, debug=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL.yaml")
+    parser.add_argument("--config_file", type=str, default="PaRL-es.yaml")
     parser.add_argument("--env", type=str, default=None)
     parser.add_argument("--evolver_algo", type=str)
     parser.add_argument("--debug", action="store_true")
