@@ -28,19 +28,20 @@ exploration_config:
 # ============= pop actors config ==============
 pop_size: 0 # number of pop_workers
 pop_config:
-  explore: true
+  explore: false
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
-  exploration_config:
-    type: StochasticSampling
+  # exploration_config:
+  #   type: StochasticSampling
   #   random_timesteps: 0
 
 # ========== ea config ==============
+evolver_algo: cem
 ea_config:
   # CEM hyperparam
   elite_fraction: 0.5
-  noise_decay_coeff: 0.95
+  noise_decay_coeff: 0.995
   noise_init: !!float 1e-3
   noise_end: !!float 1e-5
 
@@ -74,10 +75,10 @@ policy_delay: 1
 tune_alpha: true
 
 # ======== training process config =============
-min_train_timesteps_per_iteration: *train_batch_size
+min_train_timesteps_per_iteration: 0
 
-num_multi_gpu_tower_stacks: 8
-learner_queue_size: 16
+num_multi_gpu_tower_stacks: 16
+learner_queue_size: 128
 num_data_load_threads: 8
 
 target_network_update_freq: 1 # unit: iteration

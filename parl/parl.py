@@ -192,7 +192,7 @@ class PaRL:
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        target_ts = sum([batch.env_steps() for batch in flatten_batches(target_sample_batches)])
+        
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
@@ -218,6 +218,8 @@ class PaRL:
 
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
+        # number of updates = the first target_worker sample timesteps
+        target_ts = sum([batch.env_steps() for batch in target_sample_batches[0]])
         num_train_batches = target_ts
         batch_bulk = self.config["batch_bulk"]
 
