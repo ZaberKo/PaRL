@@ -28,12 +28,12 @@ exploration_config:
 # ============= pop actors config ==============
 pop_size: 10 # number of pop_workers
 pop_config:
-  explore: true
+  explore: false
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
-  exploration_config:
-    type: StochasticSampling
+  # exploration_config:
+  #   type: StochasticSampling
   #   random_timesteps: 0
 
 # ========== ea config ==============

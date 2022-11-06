@@ -22,6 +22,7 @@ def plot(
     ax.set_ylim(0, noise_init)
     plt.legend()
     plt.show()
+    print(f"var: {result[0]} -> {result[-1]}")
 
     plt.figure(dpi=300, figsize=(9, 3))
     ax=plt.axes()
@@ -30,6 +31,7 @@ def plot(
     ax.set_ylim(0, result2[0])
     plt.legend()
     plt.show()
+    print(f"std: {result2[0]} -> {result2[-1]}")
 
 # %%
 plot(
