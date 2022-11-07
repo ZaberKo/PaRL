@@ -1,0 +1,93 @@
+# ========= rllib config =========
+framework: torch
+
+
+placement_strategy: PACK
+
+log_level: WARN
+# log_level: INFO
+
+# ============ env config ===========
+env: HalfCheetah-v3
+ 
+horizon: null
+soft_horizon: false
+
+# ============== target config==========
+num_workers: 11 # number of workers for target policy
+num_gpus: 0.1
+
+batch_mode: complete_episodes
+rollout_fragment_length: 1
+episodes_per_worker: 1
+explore: true
+
+# ============= pop actors config ==============
+pop_size: 0 # number of pop_workers
+pop_config:
+  explore: true
+  num_envs_per_worker: 1
+  batch_mode: complete_episodes
+  rollout_fragment_length: 1
+
+# ========== ea config ==============
+evolver_algo: cem
+ea_config:
+  # CEM hyperparam
+  elite_fraction: 0.5
+  noise_decay_coeff: 0.995
+  noise_init: !!float 1e-3
+  noise_end: !!float 1e-5
+
+# ========= evaluation worker config ==========
+evaluation_num_workers: 10
+evaluation_interval: 10
+evaluation_duration: 10
+evaluation_duration_unit: episodes
+evaluation_config:
+  explore: false
+  num_envs_per_worker: 1
+  # batch_mode: complete_episodes
+  # rollout_fragment_length: 1
+  # num_gpus: 0.1
+  # num_gpus_per_worker: 0.01
+# ============ training hyperparameter config =============
+train_batch_size: &train_batch_size 256
+
+actor_lr: !!float 1e-3
+critic_lr: !!float 1e-3
+
+# lr_schedule: [[0, !!float 3e-4],[50000000, !!float 1e-8]]
+gamma: 0.99
+tau: 0.005
+
+policy_delay: 2
+
+
+# ======== training process config =============
+min_train_timesteps_per_iteration: 0
+
+num_multi_gpu_tower_stacks: 16
+learner_queue_size: 128
+num_data_load_threads: 8
+batch_bulk: 1
+
+target_network_update_freq: 1 # unit: iteration
+
+
+# ========= replay buffer config =============
+replay_buffer_config:
+  type: MultiAgentReplayBuffer
+  capacity: !!int 1000000
+  learning_starts: 10000
+  # num_replay_buffer_shards: 1
+
+compress_observations: false # also effect rollout transmission
+
+# ============= checkpoint & stopper config ===============
+tuner_config:
+  num_samples: 3
+  checkpoint_freq: 0 # 0: disable
+  keep_checkpoints_num: null
+  stopper:
+    training_iteration: 10000
