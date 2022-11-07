@@ -155,7 +155,7 @@ def build_sac_model_and_action_dist_fix(
         target_entropy=config["target_entropy"],
     )
 
-    if config["is_pop_worker"]:
+    if config.get("is_pop_worker", False):
         disable_grad(model.parameters())
     elif not config["tune_alpha"]:
         disable_grad([model.log_alpha])
