@@ -35,7 +35,7 @@ class ES(NeuroEvolution):
         self.noise_stdev = config.get("noise_stdev", 0.05)
         self.step_size = config.get("step_size", 0.01)
         self.target_step_size = config.get("target_step_size", self.step_size)
-        es_optim = config.get("es_optim", 'sgd')
+        es_optim = config.get("es_optim", 'adam')
 
         # initialize pop
         target_weights = self.get_target_weights()
@@ -117,7 +117,7 @@ class ES(NeuroEvolution):
 
         grad = np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
 
-        self.mean, self.update_ratio = self.optimizer(-grad)
+        self.mean, self.update_ratio = self.optimizer.update(-grad)
 
         # generate new pop
         self.generate_pop()
@@ -129,7 +129,7 @@ class ES(NeuroEvolution):
 
         grad = np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
 
-        self.mean, self.update_ratio = self.optimizer(-grad)
+        self.mean, self.update_ratio = self.optimizer.update(-grad)
 
 
         if target_fitness > max(fitnesses):
@@ -143,7 +143,6 @@ class ES(NeuroEvolution):
     @override(NeuroEvolution)
     def get_iteration_results(self):
         data = super().get_iteration_results()
-
        
         target_weights = self.get_target_weights()
         # record target_weights_flat to calc the distance between pop mean
