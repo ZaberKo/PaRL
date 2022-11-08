@@ -67,7 +67,7 @@ def make_td3_models(policy: Policy) -> ModelV2:
         ),
     )
 
-    if policy.config["is_pop_worker"]:
+    if policy.get("is_pop_worker", False):
         disable_grad(model.parameters())
 
     policy.target_model = ModelCatalog.get_model_v2(
