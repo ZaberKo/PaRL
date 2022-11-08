@@ -19,14 +19,14 @@ num_gpus: 0
 
 batch_mode: complete_episodes
 rollout_fragment_length: 1
-episodes_per_worker: 5
+episodes_per_worker: 1
 explore: true
 exploration_config:
   type: StochasticSampling
-  # random_timesteps: 10000
+  random_timesteps: 10000
 
 # ============= pop actors config ==============
-pop_size: 10 # number of pop_workers
+pop_size: 50 # number of pop_workers
 pop_config:
   explore: true
   num_envs_per_worker: 1
@@ -37,13 +37,13 @@ pop_config:
     random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: cem-pure
+evolver_algo: es
 ea_config:
   # CEM hyperparam
-  elite_fraction: 0.5
-  noise_decay_coeff: 0.95
-  noise_init: !!float 1e-3
-  noise_end: !!float 1e-5
+  # elite_fraction: 0.5
+  # noise_decay_coeff: 0.95
+  # noise_init: !!float 1e-3
+  # noise_end: !!float 1e-5
   # GA
   # migration_freq: 10
   # migration_start: 0
@@ -51,7 +51,8 @@ ea_config:
   # crossover_prob: 0
   # mutation_prob: 0.9
   # ES
-  # noise_stdev: 0.05
+  noise_stdev: 0.05
+  step_size: 0.01
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
@@ -103,7 +104,7 @@ compress_observations: false # also effect rollout transmission
 
 # ============= checkpoint & stopper config ===============
 tuner_config:
-  num_samples: 5
+  num_samples: 3
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
