@@ -108,14 +108,14 @@ class ES(NeuroEvolution):
     @override(NeuroEvolution)
     def _evolve(self, fitnesses, target_fitness):
         self._evolve_pop_only(fitnesses)
-        self._evolve_with_target(fitnesses, target_fitness)
+        # self._evolve_with_target(fitnesses, target_fitness)
 
     def _evolve_pop_only(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
 
         ws = centered_ranks(fitnesses)
 
-        grad += np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
+        grad = np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
 
         self.mean, self.update_ratio = self.optimizer(-grad)
 
@@ -127,7 +127,7 @@ class ES(NeuroEvolution):
         fitnesses = np.asarray(fitnesses)
         ws = centered_ranks(fitnesses)
 
-        grad += np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
+        grad = np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
 
         self.mean, self.update_ratio = self.optimizer(-grad)
 
