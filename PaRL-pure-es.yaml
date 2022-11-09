@@ -53,6 +53,7 @@ ea_config:
   # ES
   noise_stdev: 0.05
   step_size: 0.01
+  es_optim: adam
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10

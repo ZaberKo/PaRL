@@ -136,9 +136,9 @@ class ES(NeuroEvolution):
             target_weights = self.get_target_weights()
             self.target_weights_flat = self.flatten_weights(target_weights)
 
-            direction = self.target_weights_flat - target_weights
+            direction = self.target_weights_flat - self.mean
             self.mean += self.target_step_size * \
-                direction/self.np.linalg.norm(direction)
+                direction/np.linalg.norm(direction)
 
     @override(NeuroEvolution)
     def get_iteration_results(self):
