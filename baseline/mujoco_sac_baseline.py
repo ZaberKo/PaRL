@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Union
 
 
-
 @dataclass
 class Config:
     env: str = "HalfCheetah-v3"
@@ -54,6 +53,7 @@ class Config:
         num_gpus = 1 if self.use_gpu else 0
         return num_cpus, num_gpus
 
+
 def generate_algo_config(config: Config):
     class CPUInitCallback(DefaultCallbacks):
         def on_algorithm_init(self, *, algorithm: Algorithm, **kwargs) -> None:
@@ -86,6 +86,7 @@ def generate_algo_config(config: Config):
         # grad_clip=config.grad_clip,
         tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
+        use_huber=True,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
@@ -142,6 +143,7 @@ def generate_algo_config(config: Config):
     sac_config = sac_config.to_dict()
 
     return sac_config
+
 
 def main(_config):
     config = Config(**_config)

@@ -58,6 +58,11 @@ class SACConfigMod(SACConfig):
         super().__init__(algo_class=algo_class or SAC_Parallel)
         self.tune_alpha = True
         self.policy_delay = 1
+
+        # whether use huber_loss in critic loss
+        self.use_huber = False
+        self.huber_beta = 1.0
+
         self.optimization = {
             "actor_learning_rate": 3e-4,
             "critic_learning_rate": 3e-4,
@@ -93,6 +98,8 @@ class SACConfigMod(SACConfig):
         add_actor_layer_norm: bool = None,
         tune_alpha: bool = None,
         policy_delay: int = None,
+        use_huber: bool = None,
+        huber_beta: float = None,
         optimization: dict = None,
         **kwargs
     ):
@@ -104,6 +111,12 @@ class SACConfigMod(SACConfig):
             self.tune_alpha = tune_alpha
         if policy_delay is not None:
             self.policy_delay = policy_delay
+
+        if use_huber is not None:
+            self.use_huber = use_huber
+        if huber_beta is not None:
+            self.huber_beta = huber_beta
+
         if optimization is not None:
             self.optimization.update(optimization)
 
