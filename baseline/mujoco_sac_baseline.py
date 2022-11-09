@@ -86,14 +86,14 @@ def generate_algo_config(config: Config):
         # grad_clip=config.grad_clip,
         tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
-        use_huber=True,
+        # use_huber=True,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
-            "learning_starts": 10000,
+            "learning_starts": 1000,
         },
         optimization={
             "actor_learning_rate": 1e-3,
