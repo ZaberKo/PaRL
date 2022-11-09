@@ -107,8 +107,8 @@ class ES(NeuroEvolution):
 
     @override(NeuroEvolution)
     def _evolve(self, fitnesses, target_fitness):
-        self._evolve_pop_only(fitnesses)
-        # self._evolve_with_target(fitnesses, target_fitness)
+        # self._evolve_pop_only(fitnesses)
+        self._evolve_with_target(fitnesses, target_fitness)
 
     def _evolve_pop_only(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
@@ -164,3 +164,9 @@ class ES(NeuroEvolution):
             worker=worker,
             weights=self.unflatten_weights(self.mean)
         )
+
+class ESPure(ES):
+    @override(NeuroEvolution)
+    def _evolve(self, fitnesses, target_fitness):
+        self._evolve_pop_only(fitnesses)
+        # self._evolve_with_target(fitnesses, target_fitness)

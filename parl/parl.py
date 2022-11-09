@@ -17,7 +17,7 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure, HybridES
+from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure, HybridES, ESPure
 
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
@@ -45,7 +45,8 @@ evolver_algo = {
     "ga": GA,
     "cem": CEM,
     "cem-pure": CEMPure,
-    "hybrid-es": HybridES
+    "hybrid-es": HybridES,
+    'es-pure': ESPure
 }
 
 

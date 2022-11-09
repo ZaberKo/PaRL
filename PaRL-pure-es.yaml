@@ -37,7 +37,7 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: es
+evolver_algo: es-pure
 ea_config:
   # CEM hyperparam
   # elite_fraction: 0.5
