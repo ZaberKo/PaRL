@@ -86,7 +86,6 @@ def generate_algo_config(config: Config):
         # soft_horizon=False,
     )
     sac_config = sac_config.training(
-        # grad_clip=config.grad_clip,
         tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
         # use_huber=True,
@@ -134,6 +133,8 @@ def generate_algo_config(config: Config):
     )
 
     sac_config = sac_config.environment(
+        normalize_actions=False,
+        clip_actions=False, #default
         env=config.env,
         # env_config=mujoco_config.get(
         #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})

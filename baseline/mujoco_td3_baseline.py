@@ -133,6 +133,8 @@ def generate_algo_config(config: Config):
     )
 
     td3_config = td3_config.environment(
+        normalize_actions=False,
+        clip_actions=False, #default        
         env=config.env,
         # env_config=mujoco_config.get(
         #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})
