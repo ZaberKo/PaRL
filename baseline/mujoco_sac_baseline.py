@@ -96,7 +96,7 @@ def generate_algo_config(config: Config):
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
-            "learning_starts": 10000,
+            "learning_starts": 1000,
         },
         optimization={
             "actor_learning_rate": 1e-3,
