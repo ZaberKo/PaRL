@@ -9,20 +9,20 @@ from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
-from ray.rllib.utils.numpy import (
-    SMALL_NUMBER,
-    MIN_LOG_NN_OUTPUT,
-    MAX_LOG_NN_OUTPUT
-)
+# from ray.rllib.utils.numpy import (
+#     SMALL_NUMBER,
+#     MIN_LOG_NN_OUTPUT,
+#     MAX_LOG_NN_OUTPUT
+# )
 from ray.rllib.utils.typing import TensorType, List, Union, Tuple, ModelConfigDict
 
 torch, nn = try_import_torch()
 
 
 
-# SMALL_NUMBER=1e-9
-# MIN_LOG_NN_OUTPUT = -20
-# MAX_LOG_NN_OUTPUT = 2
+SMALL_NUMBER=1e-9
+MIN_LOG_NN_OUTPUT = -20
+MAX_LOG_NN_OUTPUT = 2
 
 # numerically stable version of TorchSquashedGaussian
 class SquashedGaussian(TorchDistributionWrapper):
