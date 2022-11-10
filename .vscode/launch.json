@@ -22,14 +22,16 @@
             "justMyCode": false
         },
         {
-            "name": "Python Test: Current File",
+            "name": "Train Baseline",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
-            "args": ["--env", "Hopper-v3"]
+            "args": ["--debug", 
+            // "--env", "Hopper-v3"
+        ]
         }
     ]
 }

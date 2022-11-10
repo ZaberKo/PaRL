@@ -17,7 +17,8 @@ from ray.rllib.algorithms import Algorithm
 
 import argparse
 from dataclasses import dataclass
-
+from tqdm import trange
+from ray.rllib.utils.debug import summarize
 
 @dataclass
 class Config:
@@ -77,9 +78,9 @@ def generate_algo_config(config: Config):
     )
     td3_config = td3_config.training(
         # grad_clip=config.grad_clip,
-        critic_lr = 1e-3,
-        actor_lr = 1e-3,
-        tau = 5e-3,
+        critic_lr=1e-3,
+        actor_lr=1e-3,
+        tau=5e-3,
         policy_delay=2,
         target_noise=0.2,
         target_noise_clip=0.5,
@@ -146,12 +147,15 @@ def generate_algo_config(config: Config):
     return td3_config
 
 
-def main(_config):
+def main(_config, debug=False):
     config = Config(**_config)
 
     td3_config = generate_algo_config(config)
 
     num_cpus, num_gpus = config.resources()
+
+    if debug:
+        num_cpus = num_cpus//config.num_tests
 
     ray.init(
         num_cpus=num_cpus,
@@ -160,28 +164,40 @@ def main(_config):
         include_dashboard=True
     )
 
-    tuner = Tuner(
-        TD3Mod,
-        param_space=td3_config,
-        tune_config=TuneConfig(
-            num_samples=config.num_tests
-        ),
-        run_config=RunConfig(
-            local_dir="~/ray_results",
-            # this will results in 1e6 updates
-            stop={"training_iteration": config.training_iteration},
-            checkpoint_config=CheckpointConfig(
-                num_to_keep=None,  # save all checkpoints
-                checkpoint_frequency=config.checkpoint_freq
+    if debug:
+        trainer = TD3Mod(config=td3_config)
+
+        for i in trange(10000):
+            res = trainer.train()
+            print(f"======= iter {i+1} ===========")
+            del res["config"]
+            del res["hist_stats"]
+            print(summarize(res))
+            print("+"*20)
+    else:
+        tuner = Tuner(
+            TD3Mod,
+            param_space=td3_config,
+            tune_config=TuneConfig(
+                num_samples=config.num_tests
+            ),
+            run_config=RunConfig(
+                local_dir="~/ray_results",
+                # this will results in 1e6 updates
+                stop={"training_iteration": config.training_iteration},
+                checkpoint_config=CheckpointConfig(
+                    num_to_keep=None,  # save all checkpoints
+                    checkpoint_frequency=config.checkpoint_freq
+                )
             )
         )
-    )
 
-    result_grid = tuner.fit()
+        result_grid = tuner.fit()
 
-    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join(config.save_folder, exp_name), "wb") as f:
-        cloudpickle.dump(result_grid, f)
+        exp_name = os.path.basename(
+            tuner._local_tuner._experiment_checkpoint_dir)
+        with open(os.path.join(config.save_folder, exp_name), "wb") as f:
+            cloudpickle.dump(result_grid, f)
 
     time.sleep(20)
 
@@ -191,6 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str,
                         default="baseline/td3_baseline.yaml")
     parser.add_argument("--env", type=str, default=None)
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     yaml = YAML(typ='safe')
@@ -199,4 +216,4 @@ if __name__ == "__main__":
 
     if args.env:
         config["env"] = args.env
-    main(config)
+    main(config, args.debug)

@@ -16,6 +16,9 @@ from ray.rllib.algorithms import Algorithm
 
 import argparse
 from dataclasses import dataclass
+from tqdm import trange
+from ray.rllib.utils.debug import summarize
+
 from typing import Union
 
 
@@ -24,7 +27,7 @@ class Config:
     env: str = "HalfCheetah-v3"
 
     num_rollout_workers: int = 0
-    num_eval_workers: int = 16
+    num_eval_workers: int = 10
 
     rollout_fragment_length: int = 50
     enable_multiple_updates: bool = True
@@ -78,15 +81,15 @@ def generate_algo_config(config: Config):
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
-        # no_done_at_end=True,
+        no_done_at_end=True,
         horizon=1000,
-        # soft_horizon=False,
+        soft_horizon=False,
     )
     sac_config = sac_config.training(
         # grad_clip=config.grad_clip,
         tune_alpha=config.autotune_alpha,
         initial_alpha=config.initial_alpha,
-        use_huber=True,
+        # use_huber=True,
         train_batch_size=256,
         training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
@@ -145,12 +148,15 @@ def generate_algo_config(config: Config):
     return sac_config
 
 
-def main(_config):
+def main(_config, debug=False):
     config = Config(**_config)
 
     sac_config = generate_algo_config(config)
 
     num_cpus, num_gpus = config.resources()
+
+    if debug:
+        num_cpus=num_cpus//config.num_tests
 
     ray.init(
         num_cpus=num_cpus,
@@ -159,28 +165,39 @@ def main(_config):
         include_dashboard=True
     )
 
-    tuner = Tuner(
-        SAC_Parallel,
-        param_space=sac_config,
-        tune_config=TuneConfig(
-            num_samples=config.num_tests
-        ),
-        run_config=RunConfig(
-            local_dir="~/ray_results",
-            # this will results in 1e6 updates
-            stop={"training_iteration": config.training_iteration},
-            checkpoint_config=CheckpointConfig(
-                num_to_keep=None,  # save all checkpoints
-                checkpoint_frequency=config.checkpoint_freq
+    if debug:
+        trainer = SAC_Parallel(config=sac_config)
+
+        for i in trange(10000):
+            res = trainer.train()
+            print(f"======= iter {i+1} ===========")
+            del res["config"]
+            del res["hist_stats"]
+            print(summarize(res))
+            print("+"*20)
+    else:
+        tuner = Tuner(
+            SAC_Parallel,
+            param_space=sac_config,
+            tune_config=TuneConfig(
+                num_samples=config.num_tests
+            ),
+            run_config=RunConfig(
+                local_dir="~/ray_results",
+                # this will results in 1e6 updates
+                stop={"training_iteration": config.training_iteration},
+                checkpoint_config=CheckpointConfig(
+                    num_to_keep=None,  # save all checkpoints
+                    checkpoint_frequency=config.checkpoint_freq
+                )
             )
         )
-    )
 
-    result_grid = tuner.fit()
+        result_grid = tuner.fit()
 
-    exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
-    with open(os.path.join(config.save_folder, exp_name), "wb") as f:
-        cloudpickle.dump(result_grid, f)
+        exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
+        with open(os.path.join(config.save_folder, exp_name), "wb") as f:
+            cloudpickle.dump(result_grid, f)
 
     time.sleep(40)
 
@@ -190,6 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str,
                         default="baseline/sac_baseline.yaml")
     parser.add_argument("--env", type=str, default=None)
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     yaml = YAML(typ='safe')
@@ -198,4 +216,4 @@ if __name__ == "__main__":
 
     if args.env:
         config["env"] = args.env
-    main(config)
+    main(config, args.debug)
