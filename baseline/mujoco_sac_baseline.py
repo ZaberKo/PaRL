@@ -81,9 +81,9 @@ def generate_algo_config(config: Config):
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
-        no_done_at_end=True,
-        horizon=1000,
-        soft_horizon=False,
+        # no_done_at_end=True,
+        # horizon=1000,
+        # soft_horizon=False,
     )
     sac_config = sac_config.training(
         # grad_clip=config.grad_clip,

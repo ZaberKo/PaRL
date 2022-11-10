@@ -18,39 +18,13 @@ from ray.rllib.utils.typing import (
 from ray.rllib.utils.metrics import (
     NUM_ENV_STEPS_SAMPLED,
     NUM_AGENT_STEPS_SAMPLED,
+    TARGET_NET_UPDATE_TIMER
 )
 from ray.rllib.utils.metrics import SYNCH_WORKER_WEIGHTS_TIMER
 from ray.rllib.execution.common import (
     LAST_TARGET_UPDATE_TS,
-    NUM_TARGET_UPDATES,
+    NUM_TARGET_UPDATES
 )
-
-
-def calculate_rr_weights(config: AlgorithmConfigDict):
-    """Calculate the round robin weights for the rollout and train steps"""
-    if not config["training_intensity"]:
-        return [1, 1]
-
-    # Calculate the "native ratio" as:
-    # [train-batch-size] / [size of env-rolled-out sampled data]
-    # This is to set freshly rollout-collected data in relation to
-    # the data we pull from the replay buffer (which also contains old
-    # samples).
-    native_ratio = config["train_batch_size"] / (
-        config["rollout_fragment_length"]
-        * config["num_envs_per_worker"]
-        # Add one to workers because the local
-        # worker usually collects experiences as well, and we avoid division by zero.
-        * max(config["num_workers"], 1)
-    )
-
-    # Training intensity is specified in terms of
-    # (steps_replayed / steps_sampled), so adjust for the native ratio.
-    sample_and_train_weight = config["training_intensity"] / native_ratio
-    if sample_and_train_weight < 1:
-        return [int(np.round(1 / sample_and_train_weight)), 1]
-    else:
-        return [1, int(np.round(sample_and_train_weight))]
 
 
 class SACConfigMod(SACConfig):
@@ -150,36 +124,35 @@ class SAC_Parallel(SAC):
             The results dict from executing the training iteration.
         """
         train_results = {}
+        batch_size = self.config["train_batch_size"]
+        local_worker = self.workers.local_worker()
 
-        # We alternate between storing new samples and sampling and training
-        store_weight, sample_and_train_weight = calculate_rr_weights(
-            self.config)
+        # Sample (MultiAgentBatch) from workers.
+        new_sample_batches = synchronous_parallel_sample(
+            worker_set=self.workers, concat=False
+        )
 
-        for _ in range(store_weight):
-            # Sample (MultiAgentBatch) from workers.
-            new_sample_batch = synchronous_parallel_sample(
-                worker_set=self.workers, concat=True
-            )
-
+        sampled_steps = 0
+        for batch in new_sample_batches:
             # Update counters
-            self._counters[NUM_AGENT_STEPS_SAMPLED] += new_sample_batch.agent_steps()
-            self._counters[NUM_ENV_STEPS_SAMPLED] += new_sample_batch.env_steps()
-
+            self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
+            self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
+            sampled_steps += batch.env_steps()
             # Store new samples in replay buffer.
-            self.local_replay_buffer.add(new_sample_batch)
+            self.local_replay_buffer.add(batch)
 
         global_vars = {
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
         }
 
-        for _ in range(sample_and_train_weight):
+        num_train_batches = sampled_steps
+        for _ in range(num_train_batches):
             # Sample training batch (MultiAgentBatch) from replay buffer.
-            train_batch = self.local_replay_buffer.sample(
-                self.config["train_batch_size"])
+            train_batch = self.local_replay_buffer.sample(batch_size)
 
             # Old-style replay buffers return None if learning has not started
             if train_batch is None or len(train_batch) == 0:
-                self.workers.local_worker().set_global_vars(global_vars)
+                local_worker.set_global_vars(global_vars)
                 break
 
             # Postprocess batch before we learn on it
@@ -210,10 +183,11 @@ class SAC_Parallel(SAC):
             cur_ts = self._counters[NUM_ENV_STEPS_SAMPLED]
             last_update = self._counters[LAST_TARGET_UPDATE_TS]
             if cur_ts - last_update >= self.config["target_network_update_freq"]:
-                to_update = self.workers.local_worker().get_policies_to_train()
-                self.workers.local_worker().foreach_policy_to_train(
-                    lambda p, pid: pid in to_update and p.update_target()
-                )
+                with self._timers[TARGET_NET_UPDATE_TIMER]:
+                    to_update = local_worker.get_policies_to_train()
+                    local_worker.foreach_policy_to_train(
+                        lambda p, pid: pid in to_update and p.update_target()
+                    )
                 self._counters[NUM_TARGET_UPDATES] += 1
                 self._counters[LAST_TARGET_UPDATE_TS] = cur_ts
 

@@ -16,13 +16,14 @@ from ray.rllib.utils.typing import (
 from ray.rllib.utils.metrics import (
     NUM_ENV_STEPS_SAMPLED,
     NUM_AGENT_STEPS_SAMPLED,
-    TARGET_NET_UPDATE_TIMER,
+    TARGET_NET_UPDATE_TIMER
 )
 from ray.rllib.utils.metrics import SYNCH_WORKER_WEIGHTS_TIMER
 from ray.rllib.execution.common import (
     LAST_TARGET_UPDATE_TS,
-    NUM_TARGET_UPDATES,
+    NUM_TARGET_UPDATES
 )
+
 
 class TD3ConfigMod(TD3Config):
     def __init__(self, algo_class=None):
@@ -41,6 +42,7 @@ class TD3ConfigMod(TD3Config):
             self.add_actor_layer_norm = add_actor_layer_norm
 
         return self
+
 
 class TD3Mod(TD3):
     @classmethod
@@ -64,6 +66,7 @@ class TD3Mod(TD3):
         Returns:
             The results dict from executing the training iteration.
         """
+        train_results = {}
         batch_size = self.config["train_batch_size"]
         local_worker = self.workers.local_worker()
 
@@ -72,35 +75,33 @@ class TD3Mod(TD3):
             worker_set=self.workers, concat=False
         )
 
-        sampled_steps=0
+        sampled_steps = 0
         for batch in new_sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
+            sampled_steps += batch.env_steps()
             # Store new samples in the replay buffer
-            # Use deprecated add_batch() to support old replay buffers for now
             self.local_replay_buffer.add(batch)
-            sampled_steps+=batch.env_steps()
 
         global_vars = {
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
         }
 
-        num_train_batches=sampled_steps
+        num_train_batches = sampled_steps
         for _ in range(num_train_batches):
             # Use deprecated replay() to support old replay buffers for now
             train_batch = self.local_replay_buffer.sample(batch_size)
             # If not yet learning, early-out here and do not perform learning, weight-
             # synching, or target net updating.
             if train_batch is None or len(train_batch) == 0:
-                self.workers.local_worker().set_global_vars(global_vars)
-                return {}
+                local_worker.set_global_vars(global_vars)
+                break
 
             # Learn on the training batch.
             # Use simple optimizer (only for multi-agent or tf-eager; all other
             # cases should use the multi-GPU optimizer, even if only using 1 GPU)
             train_results = train_one_step(self, train_batch)
-
 
             # Update replay buffer priorities.
             update_priorities_in_replay_buffer(

@@ -74,7 +74,7 @@ def generate_algo_config(config: Config):
         num_rollout_workers=config.num_rollout_workers,
         num_envs_per_worker=1,
         rollout_fragment_length=config.rollout_fragment_length,
-        horizon=1000,
+        # horizon=1000,
     )
     td3_config = td3_config.training(
         # grad_clip=config.grad_clip,
