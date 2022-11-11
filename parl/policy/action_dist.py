@@ -131,7 +131,7 @@ class SquashedGaussian(TorchDistributionWrapper):
 
 class SquashedGaussian2(TorchDistributionWrapper):
     """
-        only output action [-1, 1]
+        only output action [-1, 1], following spinup version
     """
 
     def __init__(
@@ -149,7 +149,7 @@ class SquashedGaussian2(TorchDistributionWrapper):
         """
         super().__init__(inputs, model)
         # Split inputs into mean and log(std).
-        mean, log_std = torch.chunk(self.inputs, 2, dim=-1)
+        mean, log_std = torch.chunk(self.inputs, 2, dim=-1) # [B,n]
         # Clip `scale` values (coming from NN) to reasonable values.
         log_std = torch.clamp(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT)
         std = torch.exp(log_std)

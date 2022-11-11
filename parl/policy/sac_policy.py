@@ -207,10 +207,11 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
         "critic_loss": torch.mean(
             torch.stack(tree.flatten(policy.get_tower_stats("critic_loss")))
         ),
-        "alpha_value": torch.exp(policy.model.log_alpha),
-        "log_alpha_value": policy.model.log_alpha,
+        "alpha_value": torch.exp(policy.model.log_alpha.detach()),
+        "log_alpha_value": policy.model.log_alpha.detach(),
         "target_entropy": policy.model.target_entropy,
         "policy_t": torch.mean(torch.stack(policy.get_tower_stats("policy_t"))),
+        "log_pis_t": torch.mean(torch.stack(policy.get_tower_stats("log_pis_t"))),
         "mean_q": torch.mean(q_t),
         "max_q": torch.max(q_t),
         "min_q": torch.min(q_t),

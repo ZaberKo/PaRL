@@ -90,7 +90,6 @@ def generate_algo_config(config: Config):
         initial_alpha=config.initial_alpha,
         # use_huber=True,
         train_batch_size=256,
-        training_intensity=256//config.rollout_vs_train if config.enable_multiple_updates else None,
         replay_buffer_config={
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),

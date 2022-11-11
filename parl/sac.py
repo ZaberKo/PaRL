@@ -34,8 +34,8 @@ class SACConfigMod(SACConfig):
         self.policy_delay = 1
 
         # whether use huber_loss in critic loss
-        self.use_huber = False
-        self.huber_beta = 1.0
+        # self.use_huber = False
+        # self.huber_beta = 1.0
 
         self.optimization = {
             "actor_learning_rate": 3e-4,
@@ -87,9 +87,9 @@ class SACConfigMod(SACConfig):
             self.policy_delay = policy_delay
 
         if use_huber is not None:
-            self.use_huber = use_huber
+            self.optimization["critic_use_huber"] = use_huber
         if huber_beta is not None:
-            self.huber_beta = huber_beta
+            self.optimization["huber_beta"] = huber_beta
 
         if optimization is not None:
             self.optimization.update(optimization)

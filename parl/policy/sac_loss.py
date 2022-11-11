@@ -41,7 +41,7 @@ def calc_actor_loss(
     if policy.config["twin_q"]:
         twin_q_t_det_policy = model.get_twin_q_values(model_out_t, policy_t)
         q_t_det_policy = torch.min(q_t_det_policy, twin_q_t_det_policy)
-        # TODO: use torch.mean as softlearning
+        # Note: softlearning repo use torch.mean instead of torch.min
 
     q_t_det_policy = torch.squeeze(q_t_det_policy, dim=-1)
 
@@ -61,8 +61,8 @@ def calc_critic_loss(
     dist_class: Type[TorchDistributionWrapper],
     train_batch: SampleBatch
 ):
-    use_huber=policy.config.get("use_huber", False)
-    huber_beta = policy.config.get("huber_beta", 1.0)
+    use_huber=policy.config["optimization"].get("use_huber", False)
+    huber_beta = policy.config["optimization"].get("huber_beta", 1.0)
 
     if use_huber:
         loss_func=partial(F.smooth_l1_loss, beta=huber_beta)
@@ -121,8 +121,7 @@ def calc_critic_loss(
             train_batch[SampleBatch.REWARDS]
             + (policy.config["gamma"] **
                policy.config["n_step"]) * q_tp1_masked
-        ).detach()
-
+        )
     # Compute the TD-error (potentially clipped).
     with torch.no_grad():
         base_td_error = torch.abs(q_t_selected - q_t_selected_target)  # [B]

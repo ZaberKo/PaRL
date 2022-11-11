@@ -86,10 +86,9 @@ class SACTorchModel(TorchModelV2, nn.Module):
         elif isinstance(action_space, Box):
             self.action_dim = np.product(action_space.shape)
             self.discrete = False
-            orig_space = getattr(obs_space, "original_space", obs_space)
-            actor_ins = orig_space.shape[0]
-            q_ins = orig_space.shape[0] + self.action_dim
-            action_outs = 2 * self.action_dim
+            actor_ins = np.product(obs_space.shape)
+            q_ins = actor_ins + self.action_dim
+            action_outs = 2 * self.action_dim # mean & log_std
             q_outs = 1
         else:
             raise ValueError(f"not supported action space: {action_space}")
