@@ -2,9 +2,10 @@ import torch
 import torch.nn.functional as F
 from functools import partial
 
+from .utils import TRUNCATED
+
 from typing import List, Type, Union, Dict, Tuple, Optional
 from ray.rllib.policy.policy import Policy
-
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models import ModelV2
@@ -112,8 +113,14 @@ def calc_critic_loss(
             q_tp1 = torch.min(q_tp1, twin_q_tp1)
 
         q_tp1_best = torch.squeeze(q_tp1, dim=-1)
+
+
+        dones = torch.logical_and(
+            train_batch[SampleBatch.DONES],
+            torch.logical_not(train_batch[TRUNCATED])
+        )         
         q_tp1_best_masked = (
-            1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1_best
+            1.0 - dones.float()) * q_tp1_best
 
         # Compute RHS of bellman equation.
         q_t_selected_target = (

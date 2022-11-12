@@ -8,7 +8,7 @@ import torch
 from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 from parl.sac import SAC_Parallel, SACConfigMod
-from parl.env_config import mujoco_config
+from parl.env import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
@@ -133,7 +133,7 @@ def generate_algo_config(config: Config):
 
     sac_config = sac_config.environment(
         normalize_actions=False,
-        clip_actions=False, #default
+        clip_actions=False,  # default
         env=config.env,
         # env_config=mujoco_config.get(
         #     config.env.split("-")[0], {}).get("Parameterizable-v3", {})
@@ -156,7 +156,7 @@ def main(_config, debug=False):
     num_cpus, num_gpus = config.resources()
 
     if debug:
-        num_cpus=num_cpus//config.num_tests
+        num_cpus = num_cpus//config.num_tests
 
     ray.init(
         num_cpus=num_cpus,
@@ -195,7 +195,8 @@ def main(_config, debug=False):
 
         result_grid = tuner.fit()
 
-        exp_name = os.path.basename(tuner._local_tuner._experiment_checkpoint_dir)
+        exp_name = os.path.basename(
+            tuner._local_tuner._experiment_checkpoint_dir)
         with open(os.path.join(config.save_folder, exp_name), "wb") as f:
             cloudpickle.dump(result_grid, f)
 

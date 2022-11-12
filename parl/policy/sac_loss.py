@@ -3,6 +3,7 @@ from ray.rllib.utils.torch_utils import huber_loss
 from ray.rllib.algorithms.dqn.dqn_tf_policy import PRIO_WEIGHTS
 
 from parl.utils import disable_grad_ctx
+from .utils import TRUNCATED
 from functools import partial
 
 from typing import List, Type, Union, Dict, Tuple, Optional
@@ -114,7 +115,11 @@ def calc_critic_loss(
         q_tp1 = torch.squeeze(q_tp1, dim=-1)  # [B,1] -> [B]
         q_tp1 -= alpha * log_pis_tp1
 
-        q_tp1_masked = (1.0 - train_batch[SampleBatch.DONES].float()) * q_tp1
+        dones = torch.logical_and(
+            train_batch[SampleBatch.DONES],
+            torch.logical_not(train_batch[TRUNCATED])
+        ) 
+        q_tp1_masked = (1.0 - dones.float()) * q_tp1
 
         # compute RHS of bellman equation
         q_t_selected_target = (

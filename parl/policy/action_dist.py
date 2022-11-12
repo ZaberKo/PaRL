@@ -214,6 +214,11 @@ class SquashedGaussian2(TorchDistributionWrapper):
         )
         unsquashed = torch.atanh(save_normed_values)
         return unsquashed
+    
+    @override(ActionDistribution)
+    def sampled_action_logp(self) -> TensorType:
+        assert self.last_sample is not None
+        return self.logp(self.last_sample)
 
     @staticmethod
     @override(ActionDistribution)

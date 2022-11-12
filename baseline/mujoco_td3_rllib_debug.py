@@ -10,7 +10,7 @@ from ray.air import RunConfig, CheckpointConfig
 from ray.rllib.algorithms.td3 import TD3Config, TD3
 from ray.rllib.algorithms.ddpg.ddpg_torch_policy import DDPGTorchPolicy
 
-from parl.env_config import mujoco_config
+from parl.env import mujoco_config
 from parl.policy.td3_policy import record_grads
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks

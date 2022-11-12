@@ -5,8 +5,17 @@ from parl.utils import disable_grad_ctx
 from ray.rllib.algorithms.td3 import TD3Config
 
 from parl.model.td3_model import TD3TorchModel
-from .td3_policy_mixin import TD3EvolveMixin, TargetNetworkMixin, TD3Learning
-from .utils import concat_multi_gpu_td_errors
+from ray.rllib.policy.view_requirement import ViewRequirement
+from .utils import (
+    concat_multi_gpu_td_errors,
+    postprocess_trancated_info,
+    TRUNCATED
+)
+from .td3_policy_mixin import (
+    TD3EvolveMixin,
+    TargetNetworkMixin,
+    TD3Learning
+)
 from .td3_loss import (
     calc_actor_loss,
     calc_critic_loss
@@ -67,7 +76,7 @@ def make_td3_models(policy: Policy) -> ModelV2:
         ),
     )
 
-    if policy.get("is_pop_worker", False):
+    if policy.config.get("is_pop_worker", False):
         disable_grad(model.parameters())
 
     policy.target_model = ModelCatalog.get_model_v2(
@@ -101,7 +110,6 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
     ):
         config = dict(TD3Config().to_dict(), **config)
 
-
         # Validate action space for DDPG
         validate_spaces(self, observation_space, action_space)
 
@@ -118,6 +126,12 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         TD3Learning.__init__(self)
         TargetNetworkMixin.__init__(self)
         TD3EvolveMixin.__init__(self)
+
+    @override(Policy)
+    def init_view_requirements(self):
+        super(TorchPolicyV2, self).init_view_requirements()
+
+        self.view_requirements[TRUNCATED] = ViewRequirement()
 
     @override(TorchPolicyV2)
     def make_model_and_action_dist(
@@ -146,7 +160,6 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         # Return them in the same order as the respective loss terms are returned.
         return [self.actor_optim, self.critic_optim]
 
-
     @override(TorchPolicyV2)
     def action_distribution_fn(
         self,
@@ -174,6 +187,7 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
         other_agent_batches: Optional[Dict[Any, SampleBatch]] = None,
         episode: Optional[Episode] = None,
     ) -> SampleBatch:
+        sample_batch = postprocess_trancated_info(sample_batch)
         return postprocess_nstep_and_prio(
             self, sample_batch, other_agent_batches, episode
         )
@@ -202,7 +216,6 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
 
         # Return two loss terms (corresponding to the two optimizers, we create).
         return [actor_loss, critic_loss]
-
 
     @override(TorchPolicyV2)
     def extra_compute_grad_fetches(self) -> Dict[str, Any]:

@@ -10,6 +10,7 @@ from ray.rllib.algorithms.dqn.dqn_tf_policy import (
     postprocess_nstep_and_prio,
     PRIO_WEIGHTS,
 )
+from ray.rllib.policy.view_requirement import ViewRequirement
 
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.utils.framework import try_import_torch
@@ -19,7 +20,11 @@ from .sac_policy_mixin import (
     SACLearning,
     TargetNetworkMixin
 )
-from .utils import concat_multi_gpu_td_errors
+from .utils import (
+    concat_multi_gpu_td_errors,
+    postprocess_trancated_info,
+    TRUNCATED
+)
 
 from .action_dist import (
     SquashedGaussian,
@@ -66,7 +71,7 @@ def optimizer_fn(policy: Policy, config: AlgorithmConfigDict) -> Tuple[LocalOpti
         lr=config["optimization"]["actor_learning_rate"]
     )
 
-    q_params=policy.model.q_variables()
+    q_params = policy.model.q_variables()
     critic_split = len(q_params)
     if config["twin_q"]:
         critic_split //= 2
@@ -223,6 +228,7 @@ def stats(policy: Policy, train_batch: SampleBatch) -> Dict[str, TensorType]:
 
     return states
 
+
 def validate_spaces(
     policy: Policy,
     observation_space: gym.spaces.Space,
@@ -244,12 +250,15 @@ def validate_spaces(
             "using a Tuple action space, or the multi-agent API."
         )
 
+
 def postprocess_trajectory(
     policy: Policy,
     sample_batch: SampleBatch,
     *args
 ) -> SampleBatch:
+    sample_batch = postprocess_trancated_info(sample_batch)
     return postprocess_nstep_and_prio(policy, sample_batch)
+
 
 def setup_late_mixins(
     policy: Policy,
@@ -259,6 +268,8 @@ def setup_late_mixins(
     TargetNetworkMixin.__init__(policy)
     SACEvolveMixin.__init__(policy)
 
+    # policy.view_requirements[SampleBatch.INFOS].used_for_compute_actions = True
+    policy.view_requirements[TRUNCATED] = ViewRequirement()
 
 # SACPolicy = build_policy_class(
 #     name="SACTorchPolicy",
@@ -320,14 +331,16 @@ def setup_late_mixins(
 SACPolicy = build_policy_class(
     name="SACPolicy",
     framework="torch",
-    loss_fn=actor_critic_loss_fix, # only use for view_req
+    loss_fn=actor_critic_loss_fix,  # only use for view_req
     get_default_config=lambda: ray.rllib.algorithms.sac.sac.DEFAULT_CONFIG,
     stats_fn=stats,
-    postprocess_fn=postprocess_trajectory,
+    # postprocess_fn=postprocess_trajectory,
+    postprocess_fn=postprocess_trancated_info,
     optimizer_fn=optimizer_fn,
     validate_spaces=validate_spaces,
     before_loss_init=setup_late_mixins,
     make_model_and_action_dist=build_sac_model_and_action_dist_fix,
+    # extra_action_out_fn=get_trancated_info,
     extra_learn_fetches_fn=concat_multi_gpu_td_errors,
     mixins=[SACLearning, TargetNetworkMixin, SACEvolveMixin],
     action_distribution_fn=action_distribution_fn_fix,

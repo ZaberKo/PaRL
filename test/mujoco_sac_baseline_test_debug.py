@@ -8,7 +8,7 @@ import torch
 from parl.sac import SAC_Parallel, SACConfigMod
 
 from parl.policy.sac_policy import SACPolicyTest
-from parl.env_config import mujoco_config
+from parl.env import mujoco_config
 
 from ray.rllib.utils.exploration import StochasticSampling
 from ray.rllib.algorithms.callbacks import DefaultCallbacks

@@ -37,6 +37,11 @@ class SACConfigMod(SACConfig):
         # self.use_huber = False
         # self.huber_beta = 1.0
 
+        self.tau = 5e-3
+
+        self.normalize_actions = False
+        self.clip_actions = False
+
         self.optimization = {
             "actor_learning_rate": 3e-4,
             "critic_learning_rate": 3e-4,
@@ -64,6 +69,19 @@ class SACConfigMod(SACConfig):
             "custom_model": None,  # Use this to define a custom policy model.
             "custom_model_config": {},
             "add_layer_norm": False
+        }
+
+        self.replay_buffer_config = {
+            "type": "MultiAgentReplayBuffer",
+            "capacity": int(1e6),
+            # How many steps of the model to sample before learning starts.
+            "learning_starts": 1000,
+        }
+
+        self.exploration_config = {
+            "type": "StochasticSampling",
+            # Caution, when use multiple rolloutworkers, this should be divided
+            "random_timesteps": 10000
         }
 
     def training(

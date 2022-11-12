@@ -13,7 +13,7 @@ from ray.tune import Tuner, TuneConfig
 from ray.air import RunConfig, CheckpointConfig
 
 from parl import PaRLSACConfig, PaRL_SAC_PureEA
-from parl.env_config import mujoco_config
+from parl.env import mujoco_config
 
 from parl.utils import CPUInitCallback
 
