@@ -37,13 +37,23 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: cem
+evolver_algo: es
 ea_config:
   # CEM hyperparam
-  elite_fraction: 0.5
-  noise_decay_coeff: 0.995
-  noise_init: !!float 1e-3
-  noise_end: !!float 1e-5
+  # elite_fraction: 0.5
+  # noise_decay_coeff: 0.95
+  # noise_init: !!float 1e-3
+  # noise_end: !!float 1e-5
+  # GA
+  # migration_freq: 10
+  # migration_start: 0
+  # elite_fraction: 0.2
+  # crossover_prob: 0
+  # mutation_prob: 0.9
+  # ES
+  noise_stdev: 0.05
+  step_size: 0.1
+  es_optim: adam
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
@@ -95,8 +105,8 @@ compress_observations: false # also effect rollout transmission
 
 # ============= checkpoint & stopper config ===============
 tuner_config:
-  num_samples: 5
+  num_samples: 3
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    num_env_steps_trained: 768000000 # 256*3e6
+    training_iteration: 10000

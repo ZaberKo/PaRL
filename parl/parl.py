@@ -4,11 +4,13 @@ import copy
 import math
 import numpy as np
 
-
+import ray
+from ray.exceptions import GetTimeoutError
 from ray.rllib.algorithms import Algorithm
 
 from ray.rllib.evaluation import SampleBatch
 from ray.rllib.evaluation.worker_set import WorkerSet
+from ray.rllib.evaluation.metrics import collect_metrics
 
 from ray.rllib.utils import merge_dicts
 from ray.rllib.utils.metrics.learner_info import LearnerInfoBuilder
@@ -18,6 +20,7 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure, HybridES, ESPure
+from parl.utils import ray_wait
 
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
@@ -26,6 +29,8 @@ from ray.rllib.utils.metrics import (
     NUM_AGENT_STEPS_TRAINED,
     NUM_ENV_STEPS_TRAINED,
     SYNCH_WORKER_WEIGHTS_TIMER,
+    NUM_AGENT_STEPS_SAMPLED_THIS_ITER,
+    NUM_ENV_STEPS_SAMPLED_THIS_ITER
 )
 from ray.rllib.utils.typing import (
     ResultDict,
@@ -193,7 +198,6 @@ class PaRL:
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
@@ -220,11 +224,13 @@ class PaRL:
         # num_train_batches = round(ts/train_batch_size*5)
         # num_train_batches = 1000
         # number of updates = the first target_worker sample timesteps
-        target_ts = sum([batch.env_steps() for batch in target_sample_batches[0]])
+        target_ts = sum([batch.env_steps()
+                        for batch in target_sample_batches[0]])
         num_train_batches = target_ts
         batch_bulk = self.config["batch_bulk"]
 
-        real_num_train_batches = math.ceil(num_train_batches/batch_bulk)*batch_bulk
+        real_num_train_batches = math.ceil(
+            num_train_batches/batch_bulk)*batch_bulk
 
         # print("load train batch phase")
         for _ in range(math.ceil(num_train_batches/batch_bulk)):
@@ -254,8 +260,18 @@ class PaRL:
         # step 5: retrieve train_results from learner thread
         train_results = self._retrieve_trained_results(real_num_train_batches)
         if self.pop_size > 0:
+            ea_results=self.evolver.get_iteration_results()
+
+            evaluate_this_iter = (
+                self.config["evaluation_interval"] is not None
+                and (self.iteration + 1) % self.config["evaluation_interval"] == 0
+            )
+            if evaluate_this_iter:
+                pop_evaluation_metrics=self.evaluate_pop()
+                ea_results.update(pop_evaluation_metrics)
+
             train_results.update({
-                "ea_results": self.evolver.get_iteration_results()
+                "ea_results": ea_results
             })
 
         # step 6: sync target agent weights to its rollout workers
@@ -329,6 +345,108 @@ class PaRL:
                 self.evolver.stats()
             )
         return result
+
+    def evaluate_pop(
+        self
+    ) -> dict:
+        # sync evolver pop weights to evluation_workers
+        if self.evaluation_workers.local_worker():
+            self.evolver.set_pop_weights(
+                local_worker=self.evaluation_workers.local_worker())
+        else:
+            self.evolver.set_pop_weights(
+                remote_workers=self.evaluation_workers.remote_workers())
+
+        # How many episodes/timesteps do we need to run?
+        # In "auto" mode (only for parallel eval + training): Run as long
+        # as training lasts.
+        unit = "episodes"
+        eval_cfg = self.config["evaluation_config"]
+
+
+        duration = self.config["evaluation_duration"]
+
+        agent_steps_this_iter = 0
+        env_steps_this_iter = 0
+
+        logger.info(f"Evaluating population mean for {duration} {unit}.")
+
+        if self.config["evaluation_num_workers"] == 0:
+            iters = duration
+            for _ in range(iters):
+                batch = self.evaluation_workers.local_worker().sample()
+                agent_steps_this_iter += batch.agent_steps()
+                env_steps_this_iter += batch.env_steps()
+        else:
+            def duration_fn(num_units_done):
+                return duration - num_units_done
+
+            # How many episodes have we run (across all eval workers)?
+            num_units_done = 0
+            _round = 0
+            while True:
+                units_left_to_do = duration_fn(num_units_done)
+                if units_left_to_do <= 0:
+                    break
+                _round += 1
+                try:
+                    batches = ray.get(
+                        [
+                            w.sample.remote()
+                            for i, w in enumerate(
+                                self.evaluation_workers.remote_workers()
+                            )
+                            if i < units_left_to_do
+                        ],
+                        timeout=self.config["evaluation_sample_timeout_s"],
+                    )
+                except GetTimeoutError:
+                    logger.warning(
+                        "Calling `sample()` on your remote evaluation worker(s) "
+                        "resulted in a timeout (after the configured "
+                        f"{self.config['evaluation_sample_timeout_s']} seconds)! "
+                        "Try to set `evaluation_sample_timeout_s` in your config"
+                        " to a larger value."
+                        + (
+                            " If your episodes don't terminate easily, you may "
+                            "also want to set `evaluation_duration_unit` to "
+                            "'timesteps' (instead of 'episodes')."
+                            if unit == "episodes"
+                            else ""
+                        )
+                    )
+                    break
+
+                agent_steps_this_iter += sum(b.agent_steps() for b in batches)
+                env_steps_this_iter += sum(b.env_steps() for b in batches)
+
+                num_units_done += len(batches)
+
+                logger.info(
+                    f"Ran round {_round} of parallel evaluation "
+                    f"({num_units_done}/{duration} "
+                    f"{unit} done)"
+                )
+
+        metrics = collect_metrics(
+            self.evaluation_workers.local_worker(),
+            self.evaluation_workers.remote_workers(),
+            keep_custom_metrics=eval_cfg["keep_per_episode_custom_metrics"],
+            timeout_seconds=eval_cfg["metrics_episode_collection_timeout_s"],
+        )
+
+        metrics[NUM_AGENT_STEPS_SAMPLED_THIS_ITER] = agent_steps_this_iter
+        metrics[NUM_ENV_STEPS_SAMPLED_THIS_ITER] = env_steps_this_iter
+        # TODO: Remove this key at some point. Here for backward compatibility.
+        metrics["timesteps_this_iter"] = env_steps_this_iter
+
+        # Evaluation does not run for every step.
+        # Save evaluation metrics on trainer, so it can be attached to
+        # subsequent step results as latest evaluation result.
+        self.pop_evaluation_metrics = {"pop_evaluation": metrics}
+
+        # Also return the results here for convenience.
+        return self.pop_evaluation_metrics
 
     @override(Algorithm)
     def validate_config(self, config: AlgorithmConfigDict) -> None:

@@ -123,9 +123,9 @@ class PaRL_PureEA:
             #     # set pop workers with new generated indv weights
             #     self.evolver.sync_pop_weights()
 
-            # NEW:
+            # sync pop weights to workers.local_worker; then `evaluate()` will sync them to evaluation_workers
             self.evolver.set_pop_weights(
-                local_worker
+                local_worker=local_worker
             )
 
         # Update replay buffer priorities.

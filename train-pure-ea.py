@@ -95,7 +95,7 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL-pure-cem-explore.yaml")
+    parser.add_argument("--config_file", type=str, default="exp_config/PaRL-pure-cem-explore.yaml")
     parser.add_argument("--env", type=str, default=None)
     args = parser.parse_args()
 

@@ -100,18 +100,18 @@ def main(config, debug=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL-td3.yaml")
+    parser.add_argument("--config_file", type=str, default="exp_config/PaRL-td3-es.yaml")
     parser.add_argument("--env", type=str)
-    parser.add_argument("--evolver_algo", type=str)
+    parser.add_argument("--num_samples", type=int)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     yaml = YAML(typ='safe')
     with open(args.config_file, 'r') as f:
         config = yaml.load(f)
-    # config=namedtuple('Config',config)(**config)
+
     if args.env:
         config["env"] = args.env
-    if args.evolver_algo:
-        config["evolver_algo"] = args.evolver_algo
+    if args.num_samples:
+        config["tuner_config"]["num_samples"]=args.num_samples
     main(config, args.debug)

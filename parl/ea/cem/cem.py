@@ -1,6 +1,8 @@
 import numpy as np
+import ray
 
 from parl.ea.neuroevolution import NeuroEvolution
+from parl.utils import ray_wait
 
 from ray.rllib.evaluation import RolloutWorker
 from ray.rllib.evaluation.worker_set import WorkerSet
@@ -194,15 +196,22 @@ class CEM(NeuroEvolution):
 
         return data
 
-    def set_pop_weights(self, worker: RolloutWorker = None):
-        # Note: use for local worker
-        if worker is None:
-            worker = self.target_worker.local_worker()
+    def set_pop_weights(self, local_worker: RolloutWorker = None, remote_workers=None):
+        weights = self.unflatten_weights(self.mean)
 
-        self.set_evolution_weights(
-            worker=worker,
-            weights=self.unflatten_weights(self.mean)
-        )
+        if local_worker is not None:
+            self.set_evolution_weights(
+                worker=local_worker,
+                weights=weights
+            )
+
+        if remote_workers is not None and len(remote_workers) > 0:
+            weights_ref = ray.put(weights)
+            ray_wait([
+                worker.apply.remote(
+                    self.set_evolution_weights, weights=weights_ref)
+                for worker in remote_workers
+            ])
 
 class CEMPure(CEM):
     @override(NeuroEvolution)

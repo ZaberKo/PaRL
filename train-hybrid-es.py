@@ -103,7 +103,7 @@ def main(config, debug=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="PaRL-es.yaml")
+    parser.add_argument("--config_file", type=str, default="exp_config/PaRL-es.yaml")
     parser.add_argument("--env", type=str, default=None)
     parser.add_argument("--evolver_algo", type=str)
     parser.add_argument("--debug", action="store_true")
