@@ -49,7 +49,7 @@ class FullyConnectedNetwork(nn.Module):
             in_size=prev_layer_size,
             out_size=num_outputs,
             activation_fn=output_activation,
-            use_bias=False,
+            use_bias=True,
             add_layer_norm=False
         )
 
