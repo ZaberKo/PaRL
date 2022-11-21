@@ -36,7 +36,6 @@ class ES(NeuroEvolution):
 
         self.noise_stdev = config.get("noise_stdev", 0.05)
         self.parent_ratio = config.get("parent_ratio", 0.5)
-        self.target_step_size = config.get("target_step_size", 0.1)
         self.tau = config.get("pop_tau", 0.1)
 
         self.parent_size = round(self.pop_size*self.parent_ratio)
@@ -133,7 +132,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], self.noise[parent_ids])
+            np.dot(self.ws, self.noise[parent_ids])
 
     def _evolve_with_target_noise(self, fitnesses, target_fitness):
         fitnesses.append(target_fitness)
@@ -156,7 +155,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], noise[parent_ids])
+            np.dot(self.ws, noise[parent_ids])
 
         self.use_target_flag = True
 
@@ -206,3 +205,18 @@ class ES(NeuroEvolution):
                     self.set_evolution_weights, weights=weights_ref)
                 for worker in remote_workers
             ])
+
+    def save(self):
+        state=super().save()
+
+        state["mean"] = self.mean
+
+        return state
+
+    def restore(self, state):
+        super().restore(state)
+
+        for i in range(self.pop_size):
+            self.pop_flat[i]=self.flatten_weights(self.pop[i])
+
+        self.mean = state["mean"]

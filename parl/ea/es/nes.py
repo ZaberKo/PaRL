@@ -224,6 +224,21 @@ class NES(NeuroEvolution):
                 for worker in remote_workers
             ])
 
+    def save(self):
+        state=super().save()
+
+        state["mean"] = self.mean
+
+        return state
+
+    def restore(self, state):
+        super().restore(state)
+
+        for i in range(self.pop_size):
+            self.pop_flat[i]=self.flatten_weights(self.pop[i])
+
+        self.mean = state["mean"]
+
 
 class NESPure(NES):
     @override(NES)

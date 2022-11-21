@@ -67,6 +67,14 @@ class NeuroEvolution:
             "fitness": self.fitnesses
             }
 
+    def save(self):
+        return {
+            "pop": self.pop
+        }
+
+    def restore(self, state):
+        self.pop = state["pop"]
+
     @staticmethod
     def get_evolution_weights(worker: RolloutWorker) -> ModelWeights:
         policy = worker.get_policy()

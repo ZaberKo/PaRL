@@ -467,6 +467,23 @@ class PaRL:
         if config["evaluation_interval"] <= 0:
             raise ValueError("evaluation_interval must >=1")
 
+    @override(Algorithm)
+    def __getstate__(self):
+        state = super().__getstate__()
+
+        if hasattr(self, "evolver"):
+            state["pop_data"] = self.evolver.save()
+            
+        return state
+
+    @override(Algorithm)
+    def __setstate__(self, state):
+        super().__setstate__(state)
+
+        if hasattr(self, "evolver"):
+            self.evolver.restore(state["pop_data"])
+            self.evolver.sync_pop_weights()
+
     @classmethod
     @override(Algorithm)
     def default_resource_request(cls, config):
