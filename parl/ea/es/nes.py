@@ -25,21 +25,19 @@ from ray.rllib.utils.annotations import override
 #         return np.random.randint(0, len(self.noise) - dim + 1)
 
 
-class ES(NeuroEvolution):
+class NES(NeuroEvolution):
     """
-        Canonical ES (simplified CSA-ES)
-        paper: Back to basics: Benchmarking canonical evolution strategies for playing atari
+        OpenAI-ES w/o some tricks
     """
 
     def __init__(self, config, pop_workers: WorkerSet, target_worker: RolloutWorker):
         super().__init__(config, pop_workers, target_worker)
 
         self.noise_stdev = config.get("noise_stdev", 0.05)
-        self.parent_ratio = config.get("parent_ratio", 0.5)
-        self.target_step_size = config.get("target_step_size", 0.1)
+        self.step_size = config.get("step_size", 0.01)
+        self.target_step_size = config.get("target_step_size", self.step_size)
         self.tau = config.get("pop_tau", 0.1)
-
-        self.parent_size = round(self.pop_size*self.parent_ratio)
+        es_optim = config.get("es_optim", 'sgd')
 
         # initialize pop
         target_weights = self.get_target_weights()
@@ -58,8 +56,14 @@ class ES(NeuroEvolution):
 
         self.pop_flat = np.zeros((self.pop_size, self.num_params))
 
-        # static recombination weights. (lazy generate)
-        self.ws = None
+        # _ws = np.log(self.pop_size+0.5)-np.log(np.arange(1, self.pop_size+1))
+        # self.ws = _ws/_ws.sum()
+        if es_optim == "adam":
+            self.optimizer = Adam(theta=self.mean, stepsize=self.step_size)
+        elif es_optim == 'sgd':
+            self.optimizer = SGD(theta=self.mean, stepsize=self.step_size)
+        else:
+            raise ValueError('es_optim must be "sgd" or "adam"')
 
         self.generate_pop()
         self.sync_pop_weights()
@@ -69,7 +73,7 @@ class ES(NeuroEvolution):
 
         self.grad_norm = 0
         self.direction_norm = 0
-        self.use_target_flag = False 
+        self.use_target_flag = False
 
     def generate_pop(self):
         self.noise = np.random.randn(self.pop_size, self.num_params)
@@ -113,8 +117,9 @@ class ES(NeuroEvolution):
         self.target_weights_flat = self.flatten_weights(
             self.get_target_weights()
         )
+
         # self._evolve_pop_only(fitnesses)
-        # self._evolve_with_target(fitnesses, target_fitness)
+        # self._evolve_always_with_smoothed_target(fitnesses, target_fitness)
         self._evolve_with_target_noise(fitnesses, target_fitness)
 
         # generate new pop
@@ -123,25 +128,17 @@ class ES(NeuroEvolution):
 
     def _evolve_pop_only(self, fitnesses):
         fitnesses = np.asarray(fitnesses)
+        ws = centered_ranks(fitnesses)
 
-        orders = fitnesses.argsort()[::-1]
-        parent_ids = orders[:self.parent_size]
+        grad = np.dot(ws, self.noise) / (self.noise_stdev * self.pop_size)
+        self.grad_norm = np.linalg.norm(grad)
 
-        # use weighted recombination from CSA-ES
-        if self.ws is None:
-            _ws = np.log(self.parent_size+0.5)-np.log(np.arange(1, self.parent_size+1))
-            self.ws = _ws/_ws.sum()
-
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], self.noise[parent_ids])
+        self.mean, self.update_ratio = self.optimizer.update(-grad)
 
     def _evolve_with_target_noise(self, fitnesses, target_fitness):
         fitnesses.append(target_fitness)
         fitnesses = np.asarray(fitnesses)
-
-        orders = fitnesses.argsort()[::-1]
-        parent_ids = orders[:self.parent_size+1]
-
+        ws = centered_ranks(fitnesses)
 
         target_noise = (self.target_weights_flat-self.mean) / self.noise_stdev
         noise = np.concatenate([
@@ -149,19 +146,34 @@ class ES(NeuroEvolution):
             np.expand_dims(target_noise, axis=0)
         ])
 
-        # use weighted recombination from CSA-ES
-        if self.ws is None:
-            parent_size = self.parent_size + 1
-            _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
-            self.ws = _ws/_ws.sum()
+        grad = np.dot(ws, noise) / (self.noise_stdev * self.pop_size)
+        self.grad_norm = np.linalg.norm(grad)
 
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], noise[parent_ids])
+        self.mean, self.update_ratio = self.optimizer.update(-grad)
 
         self.use_target_flag = True
 
+    def _evolve_with_target_dir(self, fitnesses, target_fitness):
+        """
+            Note: empirically not recommanded for failing tracking the target_weights
+        """
+        self._evolve_pop_only(fitnesses)
+
+        self.use_target_flag = False
+
+        if target_fitness > max(fitnesses):
+            direction = self.target_weights_flat - self.mean
+            self.direction_norm = np.linalg.norm(direction)
+            # self.mean += self.target_step_size * \
+            #     direction/np.linalg.norm(direction)
+            self.mean += self.target_step_size * direction
+
+            self.use_target_flag = True
 
     def _evolve_with_smoothed_target(self, fitnesses, target_fitness):
+        """
+            Note: empirically not recommanded for failing tracking the target_weights
+        """
         self._evolve_pop_only(fitnesses)
 
         self.use_target_flag = False
@@ -169,21 +181,26 @@ class ES(NeuroEvolution):
         if target_fitness > max(fitnesses):
             self.mean = self.mean*(1-self.tau) + \
                 self.target_weights_flat*self.tau
-
             self.use_target_flag = True
+
+    def _evolve_always_with_smoothed_target(self, fitnesses, target_fitness):
+        """
+            Note: empirically not recommanded for failing tracking the target_weights
+        """
+        self._evolve_pop_only(fitnesses)
+
+        self.mean = self.mean*(1-self.tau) + \
+                self.target_weights_flat*self.tau
+        self.use_target_flag = True
 
     @override(NeuroEvolution)
     def get_iteration_results(self):
         data = super().get_iteration_results()
 
-        target_weights = self.get_target_weights()
-        # record target_weights_flat to calc the distance between pop mean
-        self.target_weights_flat = self.flatten_weights(target_weights)
-
         data.update({
             "target_pop_l2_distance": np.linalg.norm(self.target_weights_flat-self.mean, ord=2),
-            # "update_ratio": self.update_ratio,
-            # "grad_norm": self.grad_norm,
+            "update_ratio": self.update_ratio,
+            "grad_norm": self.grad_norm,
             # "dir_norm": self.direction_norm,
             "update_target_flag": self.use_target_flag
         })
@@ -206,3 +223,19 @@ class ES(NeuroEvolution):
                     self.set_evolution_weights, weights=weights_ref)
                 for worker in remote_workers
             ])
+
+
+class NESPure(NES):
+    @override(NES)
+    def _evolve(self, fitnesses, target_fitness):
+        self._evolve_pop_only(fitnesses)
+
+        # generate new pop
+        self.generate_pop()
+        self.sync_pop_weights()
+
+    @override(NES)
+    def get_iteration_results(self):
+        data = super(NES, self).get_iteration_results()
+
+        return data

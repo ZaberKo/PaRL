@@ -37,7 +37,7 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: es
+evolver_algo: nes
 ea_config:
   # CEM hyperparam
   # elite_fraction: 0.5
@@ -50,10 +50,12 @@ ea_config:
   # elite_fraction: 0.2
   # crossover_prob: 0
   # mutation_prob: 0.9
-  # ES
+  # NES
   noise_stdev: 0.05
-  step_size: 0.1
-  es_optim: adam
+  step_size: 0.005
+  es_optim: sgd
+  # target_step_size: 0.5
+  pop_tau: 0.1
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10

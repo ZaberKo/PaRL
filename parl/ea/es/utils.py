@@ -3,7 +3,7 @@ import scipy.stats
 
 def centered_ranks(x):
     '''
-    Rank the rewards and normalize them.
+    Rank the rewards and normalize them to [0,1) then to (-0.5, 0.5) with sum=0.0
     '''
     # rank from 0 to len(x)-1
     rank = scipy.stats.rankdata(x)-1

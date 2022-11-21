@@ -19,7 +19,8 @@ from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 from parl.rollout import synchronous_parallel_sample, flatten_batches
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import NeuroEvolution, CEM, ES, GA, CEMPure, HybridES, ESPure
+from parl.ea import (NeuroEvolution, CEM, NES, ES,
+                     GA, CEMPure, HybridES, NESPure)
 from parl.utils import ray_wait
 
 from ray.rllib.utils.annotations import override
@@ -46,12 +47,13 @@ NUM_SAMPLES_ADDED_TO_QUEUE = "num_samples_added_to_queue"
 FITNESS = "fitness"
 
 evolver_algo = {
+    "nes": NES,
     "es": ES,
     "ga": GA,
     "cem": CEM,
     "cem-pure": CEMPure,
     "hybrid-es": HybridES,
-    'es-pure': ESPure
+    'nes-pure': NESPure
 }
 
 
@@ -143,7 +145,7 @@ class PaRL:
         )
         if self.pop_size > 0:
             self.ea_config = self.config["ea_config"]
-            evolver_cls = evolver_algo[self.config.get("evolver_algo", "cem")]
+            evolver_cls = evolver_algo[self.config["evolver_algo"]]
             self.evolver: NeuroEvolution = evolver_cls(
                 self.ea_config, self.pop_workers, self.workers.local_worker())
 
@@ -260,14 +262,14 @@ class PaRL:
         # step 5: retrieve train_results from learner thread
         train_results = self._retrieve_trained_results(real_num_train_batches)
         if self.pop_size > 0:
-            ea_results=self.evolver.get_iteration_results()
+            ea_results = self.evolver.get_iteration_results()
 
             evaluate_this_iter = (
                 self.config["evaluation_interval"] is not None
                 and (self.iteration + 1) % self.config["evaluation_interval"] == 0
             )
-            if evaluate_this_iter:
-                pop_evaluation_metrics=self.evaluate_pop()
+            if evaluate_this_iter and hasattr(self.evolver, "set_pop_weights"):
+                pop_evaluation_metrics = self.evaluate_pop()
                 ea_results.update(pop_evaluation_metrics)
 
             train_results.update({
@@ -362,8 +364,6 @@ class PaRL:
         # as training lasts.
         unit = "episodes"
         eval_cfg = self.config["evaluation_config"]
-
-
         duration = self.config["evaluation_duration"]
 
         agent_steps_this_iter = 0
