@@ -29,6 +29,7 @@ class NeuroEvolution:
 
     def evolve(self, fitnesses, **kwargs):
         self.fitnesses=fitnesses
+        self.generation +=1
         with self.evolve_timer:
             self._evolve(fitnesses.copy(), **kwargs)
 
