@@ -27,13 +27,15 @@ class PaRLTD3Config(PaRLBaseConfig, TD3ConfigMod):
             target_noise=0.2,
             target_noise_clip=0.5,
             smooth_target_policy=True,
-            train_batch_size=100,
+            train_batch_size=256,
             replay_buffer_config={
                 "type": "MultiAgentReplayBuffer",
                 "capacity": int(1e6),
                 # How many steps of the model to sample before learning starts.
                 "learning_starts": 1000,
-            }
+            },
+            actor_hiddens=[256,256],
+            critic_hiddens=[256,256]
         )
         self.exploration(
             exploration_config={

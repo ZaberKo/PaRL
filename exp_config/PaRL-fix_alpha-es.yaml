@@ -23,7 +23,7 @@ episodes_per_worker: 1
 explore: true
 exploration_config:
   type: StochasticSampling
-  # random_timesteps: 10000
+  # random_timesteps: 0
 
 # ============= pop actors config ==============
 pop_size: 10 # number of pop_workers
@@ -37,7 +37,7 @@ pop_config:
   #   random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: nes
+evolver_algo: es
 ea_config:
   # CEM hyperparam
   # elite_fraction: 0.5
@@ -51,11 +51,15 @@ ea_config:
   # crossover_prob: 0
   # mutation_prob: 0.9
   # NES
-  noise_stdev: 0.05
-  step_size: 0.005
-  es_optim: sgd
+  # noise_stdev: 0.01
+  # step_size: 0.01
+  # es_optim: sgd
   # target_step_size: 0.5
-  pop_tau: 0.1
+  # pop_tau: 0.1
+  # ES
+  noise_stdev: 0.02
+  parent_ratio: 0.5
+
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10

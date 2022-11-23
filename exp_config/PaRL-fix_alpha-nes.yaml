@@ -14,24 +14,30 @@ horizon: null
 soft_horizon: false
 
 # ============== target config==========
-num_workers: 11 # number of workers for target policy
+num_workers: 1 # number of workers for target policy
 num_gpus: 0.1
 
 batch_mode: complete_episodes
 rollout_fragment_length: 1
 episodes_per_worker: 1
 explore: true
+exploration_config:
+  type: StochasticSampling
+  # random_timesteps: 0
 
 # ============= pop actors config ==============
-pop_size: 0 # number of pop_workers
+pop_size: 10 # number of pop_workers
 pop_config:
   explore: true
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
+  exploration_config:
+    type: StochasticSampling
+    # random_timesteps: 0
 
 # ========== ea config ==============
-evolver_algo: es
+evolver_algo: nes
 ea_config:
   # CEM hyperparam
   # elite_fraction: 0.5
@@ -45,14 +51,14 @@ ea_config:
   # crossover_prob: 0
   # mutation_prob: 0.9
   # NES
-  # noise_stdev: 0.01
-  # step_size: 0.01
-  # es_optim: sgd
+  noise_stdev: 0.01
+  step_size: 0.01
+  es_optim: sgd
   # target_step_size: 0.5
   # pop_tau: 0.1
   # ES
-  noise_stdev: 0.02
-  parent_ratio: 0.5
+  # noise_stdev: 0.05
+  # parent_ratio: 0.5
 
 
 # ========= evaluation worker config ==========
@@ -70,15 +76,19 @@ evaluation_config:
 # ============ training hyperparameter config =============
 train_batch_size: &train_batch_size 256
 
-actor_lr: !!float 1e-3
-critic_lr: !!float 1e-3
+optimization:
+  actor_learning_rate: !!float 3e-4
+  critic_learning_rate: !!float 3e-4
+  entropy_learning_rate: !!float 3e-4
 
 # lr_schedule: [[0, !!float 3e-4],[50000000, !!float 1e-8]]
 gamma: 0.99
+initial_alpha: 0.2
 tau: 0.005
 
-policy_delay: 2
-
+# delay actor update freq
+policy_delay: 1
+tune_alpha: false
 
 # ======== training process config =============
 min_train_timesteps_per_iteration: 0
