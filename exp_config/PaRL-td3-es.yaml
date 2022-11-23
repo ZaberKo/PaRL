@@ -70,8 +70,8 @@ evaluation_config:
 # ============ training hyperparameter config =============
 train_batch_size: &train_batch_size 256
 
-actor_lr: !!float 1e-3
-critic_lr: !!float 1e-3
+actor_lr: !!float 3e-4
+critic_lr: !!float 3e-4
 
 # lr_schedule: [[0, !!float 3e-4],[50000000, !!float 1e-8]]
 gamma: 0.99

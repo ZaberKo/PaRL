@@ -78,8 +78,8 @@ def generate_algo_config(config: Config):
     )
     td3_config = td3_config.training(
         # grad_clip=config.grad_clip,
-        critic_lr=1e-3,
-        actor_lr=1e-3,
+        critic_lr=3e-4,
+        actor_lr=3e-4,
         tau=5e-3,
         policy_delay=2,
         target_noise=0.2,
