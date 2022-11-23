@@ -72,7 +72,9 @@ class NES(NeuroEvolution):
         self.update_ratio = 1.0
 
         self.grad_norm = 0
-        self.direction_norm = 0
+        self.target_noise_norm = 0
+
+
         self.use_target_flag = False
 
     def generate_pop(self):
@@ -146,8 +148,12 @@ class NES(NeuroEvolution):
             np.expand_dims(target_noise, axis=0)
         ])
 
-        grad = np.dot(ws, noise) / (self.noise_stdev * self.pop_size)
+        # grad = np.dot(ws, noise) / (self.noise_stdev * self.pop_size)
+        # we move self.noise_stdev to lr
+        grad = np.dot(ws, noise) / self.pop_size
+
         self.grad_norm = np.linalg.norm(grad)
+        self.target_noise_norm = np.linalg.norm(target_noise)
 
         self.mean, self.update_ratio = self.optimizer.update(-grad)
 
@@ -202,7 +208,8 @@ class NES(NeuroEvolution):
             "update_ratio": self.update_ratio,
             "grad_norm": self.grad_norm,
             # "dir_norm": self.direction_norm,
-            "update_target_flag": self.use_target_flag
+            "update_target_flag": self.use_target_flag,
+            "target_noise_norm": self.target_noise_norm
         })
 
         return data
