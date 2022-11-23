@@ -57,7 +57,7 @@ ea_config:
 
 # ========= evaluation worker config ==========
 evaluation_num_workers: 10
-evaluation_interval: 10
+evaluation_interval: 2
 evaluation_duration: 10
 evaluation_duration_unit: episodes
 evaluation_config:
