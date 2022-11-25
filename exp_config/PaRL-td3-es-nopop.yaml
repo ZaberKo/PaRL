@@ -21,6 +21,8 @@ batch_mode: complete_episodes
 rollout_fragment_length: 1
 episodes_per_worker: 1
 explore: true
+exploration_config:
+  random_timesteps: 0
 
 # ============= pop actors config ==============
 pop_size: 0 # number of pop_workers
@@ -29,6 +31,8 @@ pop_config:
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1
+  exploration_config:
+    random_timesteps: 0
 
 # ========== ea config ==============
 evolver_algo: es

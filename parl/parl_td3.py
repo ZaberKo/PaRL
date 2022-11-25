@@ -20,8 +20,8 @@ class PaRLTD3Config(PaRLBaseConfig, TD3ConfigMod):
         self.add_actor_layer_norm = True
         self.training(
             # grad_clip=config.grad_clip,
-            critic_lr=1e-3,
-            actor_lr=1e-3,
+            critic_lr=3e-4,
+            actor_lr=3e-4,
             tau=5e-3,
             policy_delay=2,
             target_noise=0.2,
@@ -44,7 +44,7 @@ class PaRLTD3Config(PaRLBaseConfig, TD3ConfigMod):
                 "type": "GaussianNoise",
                 # For how many timesteps should we return completely random
                 # actions, before we start adding (scaled) noise?
-                "random_timesteps": 10000,
+                "random_timesteps": 0,
                 # Gaussian stddev of action noise for exploration.
                 "stddev": 0.1,
                 # Scaling settings by which the Gaussian noise is scaled before
