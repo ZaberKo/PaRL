@@ -21,13 +21,13 @@ batch_mode: complete_episodes
 rollout_fragment_length: 1
 episodes_per_worker: 1
 explore: true
-exploration_config:
-  random_timesteps: 0
+exploration_config: # default is GaussianNoise
+  random_timesteps: 1000 # total_random_timesteps=11*1000
 
 # ============= pop actors config ==============
 pop_size: 0 # number of pop_workers
 pop_config:
-  explore: true
+  explore: false
   num_envs_per_worker: 1
   batch_mode: complete_episodes
   rollout_fragment_length: 1

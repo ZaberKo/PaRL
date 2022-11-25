@@ -23,7 +23,7 @@ episodes_per_worker: 1
 explore: true
 exploration_config:
   type: StochasticSampling
-  # random_timesteps: 10000
+  random_timesteps: 1000 # total_random_timesteps=11*1000
 
 # ============= pop actors config ==============
 pop_size: 0 # number of pop_workers

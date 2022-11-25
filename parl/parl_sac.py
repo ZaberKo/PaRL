@@ -36,7 +36,6 @@ from typing import (
 logger = logging.getLogger(__name__)
 
 
-
 class PaRLSACConfig(PaRLBaseConfig, SACConfigMod):
     def __init__(self, algo_class=None):
         SACConfigMod.__init__(self, algo_class=algo_class or PaRL)
@@ -56,6 +55,14 @@ class PaRLSACConfig(PaRLBaseConfig, SACConfigMod):
             "critic_learning_rate": 3e-4,
             "entropy_learning_rate": 3e-4,
         })
+
+        self.exploration(
+            exploration_config={
+                "type": "StochasticSampling",
+                # Caution, when use multiple rolloutworkers, this should be divided
+                "random_timesteps": 0
+            }
+        )
 
         self.policy_model_config.update({
             "add_layer_norm": True
