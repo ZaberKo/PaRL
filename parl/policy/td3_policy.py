@@ -13,6 +13,7 @@ from .utils import (
 )
 from .td3_policy_mixin import (
     TD3EvolveMixin,
+    TD3EvolveMixinWithSM,
     TargetNetworkMixin,
     TD3Learning
 )
@@ -76,8 +77,8 @@ def make_td3_models(policy: Policy) -> ModelV2:
         ),
     )
 
-    if policy.config.get("is_pop_worker", False):
-        disable_grad(model.parameters())
+    # if policy.config.get("is_pop_worker", False):
+    #     disable_grad(model.parameters())
 
     policy.target_model = ModelCatalog.get_model_v2(
         obs_space=policy.observation_space,
@@ -101,7 +102,7 @@ def make_td3_models(policy: Policy) -> ModelV2:
     return model
 
 
-class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
+class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixinWithSM, TorchPolicyV2):
     def __init__(
         self,
         observation_space: gym.spaces.Space,
@@ -125,7 +126,7 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixin, TorchPolicyV2):
 
         TD3Learning.__init__(self)
         TargetNetworkMixin.__init__(self)
-        TD3EvolveMixin.__init__(self)
+        TD3EvolveMixinWithSM.__init__(self)
 
     @override(Policy)
     def init_view_requirements(self):

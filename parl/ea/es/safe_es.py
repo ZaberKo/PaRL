@@ -11,7 +11,7 @@ from ray.rllib.evaluation.worker_set import WorkerSet
 from ray.rllib.utils.typing import ModelWeights
 
 from ray.rllib.utils.annotations import override
-
+# from ray.rllib.utils.metrics.window_stat
 
 # class SharedNoiseTable:
 #     def __init__(self, noise):
@@ -25,10 +25,9 @@ from ray.rllib.utils.annotations import override
 #         return np.random.randint(0, len(self.noise) - dim + 1)
 
 
-class ES(NeuroEvolution):
+class SafeES(NeuroEvolution):
     """
-        Canonical ES (simplified CSA-ES)
-        paper: Back to basics: Benchmarking canonical evolution strategies for playing atari
+        Canonical ES (simplified CSA-ES) with safe muation
     """
 
     def __init__(self, config, pop_workers: WorkerSet, target_worker: RolloutWorker):
@@ -64,21 +63,30 @@ class ES(NeuroEvolution):
         # static recombination weights. (lazy generate)
         self.ws = None
 
-        self.generate_pop()
+        self.generate_pop(init_pop=True)
         self.sync_pop_weights()
 
         self.target_weights_flat = None
         self.update_ratio = 1.0
         self.prev_target_weights_flat = self.mean.copy()
 
-        self.grad_norm = 0
-        self.direction_norm = 0
-        self.use_target_flag = False
-
     def generate_pop(self, init_pop=False):
-        self.noise = np.random.randn(self.pop_size, self.num_params)
+        noise = np.random.randn(self.pop_size, self.num_params)
 
-        self.pop_flat = self.mean + self.noise_stdev * self.noise
+        if init_pop:
+            self.sensitivity = np.ones((self.pop_size, self.num_params))
+        else:
+            sensitivity = ray.get([
+                worker.apply.remote(
+                    self._get_mutation_sensitivity, mutation_batch_size=256)
+                for worker in self.pop_workers.remote_workers()
+            ])
+            self.sensitivity = np.array(sensitivity)
+            assert np.array_equal(self.sensitivity.shape, self.noise.shape)
+
+        self.noise = self.noise_stdev * noise/self.sensitivity
+
+        self.pop_flat = self.mean + self.noise
 
     @override(NeuroEvolution)
     def sync_pop_weights(self):
@@ -121,26 +129,13 @@ class ES(NeuroEvolution):
         # self._evolve_with_target(fitnesses, target_fitness)
         # self._evolve_hybrid(fitnesses, target_fitness)
         # self._evolve_with_target_noise(fitnesses, target_fitness)
-        self._evolve_always_with_target_noise(fitnesses, target_fitness)
+        # self._evolve_always_with_target_noise(fitnesses, target_fitness)
+        # self._evolve_always_first_with_target_noise(fitnesses, target_fitness)
+        self._evolve_always_first_with_target_noise(fitnesses, target_fitness)
 
         # generate new pop
         self.generate_pop()
         self.sync_pop_weights()
-
-    def _evolve_pop_only(self, fitnesses):
-        fitnesses = np.asarray(fitnesses)
-
-        orders = fitnesses.argsort()[::-1]
-        parent_ids = orders[:self.parent_size]
-
-        # use weighted recombination from CSA-ES
-        if self.ws is None:
-            _ws = np.log(self.parent_size+0.5) - \
-                np.log(np.arange(1, self.parent_size+1))
-            self.ws = _ws/_ws.sum()
-
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws, self.noise[parent_ids])
 
     def _evolve_with_target_noise(self, fitnesses, target_fitness):
         fitnesses.append(target_fitness)
@@ -155,10 +150,6 @@ class ES(NeuroEvolution):
             np.expand_dims(target_noise, axis=0)
         ])
 
-        # record
-        self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
-
         # use weighted recombination from CSA-ES
         if self.ws is None:
             parent_size = self.parent_size + 1
@@ -168,7 +159,6 @@ class ES(NeuroEvolution):
         self.mean += self.noise_stdev * \
             np.dot(self.ws, noise[parent_ids])
 
-        self.use_target_flag = True
 
     def _evolve_always_with_target_noise(self, fitnesses, target_fitness):
         fitnesses = np.asarray(fitnesses)
@@ -183,15 +173,11 @@ class ES(NeuroEvolution):
             parent_ids[i] if i != len(new_fitnesses)-1 else len(fitnesses) for i in new_fitnesses.argsort()[::-1]
         ]
 
-        target_noise = (self.target_weights_flat-self.mean) / self.noise_stdev
+        target_noise = (self.target_weights_flat-self.mean)
         noise = np.concatenate([
             self.noise,
             np.expand_dims(target_noise, axis=0)
         ])
-
-        # record
-        self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
 
         # use weighted recombination from CSA-ES
         if self.ws is None:
@@ -199,10 +185,8 @@ class ES(NeuroEvolution):
             _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
             self.ws = _ws/_ws.sum()
 
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws, noise[new_orders])
+        self.mean += np.dot(self.ws, noise[new_orders])
 
-        self.use_target_flag = True
 
     def _evolve_always_first_with_target_noise(self, fitnesses, target_fitness):
         fitnesses = np.asarray(fitnesses)
@@ -216,103 +200,25 @@ class ES(NeuroEvolution):
             self.noise[parent_ids],
         ])
 
-        # record
-        self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
-
         # use weighted recombination from CSA-ES
         if self.ws is None:
             parent_size = self.parent_size + 1
             _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
             self.ws = _ws/_ws.sum()
 
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws, noise)
-
-        self.use_target_flag = True
+        self.mean += np.dot(self.ws, noise)
 
 
-
-    def _evolve_with_target_noise2(self, fitnesses, target_fitness):
-        fitnesses.append(target_fitness)
-        fitnesses = np.asarray(fitnesses)
-
-        orders = fitnesses.argsort()[::-1]
-        parent_ids = orders[:self.parent_size+1]
-
-        target_noise = (self.target_weights_flat-self.mean) / self.noise_stdev
-
-        norm = np.linalg.norm(target_noise, ord=2)
-        # make sure the target_noise's magnitude is constraint.
-        if norm > self.noise_magnitude:
-            target_noise = target_noise * (self.noise_magnitude/norm)
-        # if norm ==0:
-        #     target_noise = np.zeros_like(target_noise)
-        # else:
-        #     target_noise = target_noise * (self.noise_magnitude/norm)
-
-        noise = np.concatenate([
-            self.noise,
-            np.expand_dims(target_noise, axis=0)
-        ])
-
-        # record
-        self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
-
-        # use weighted recombination from CSA-ES
-        if self.ws is None:
-            parent_size = self.parent_size + 1
-            _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
-            self.ws = _ws/_ws.sum()
-
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws, noise[parent_ids])
-
-        self.use_target_flag = True
-
-    def _evolve_hybrid(self, fitnesses, target_fitness):
-        if self.generation % 20 == 0:
-            parent_size = self.parent_size + 1
-            _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
-            self.ws = _ws/_ws.sum()
-
-            self.prev_target_weights_flat = self.target_weights_flat.copy()
-            self._evolve_with_target_noise(fitnesses, target_fitness)
-        else:
-            _ws = np.log(self.parent_size+0.5) - \
-                np.log(np.arange(1, self.parent_size+1))
-            self.ws = _ws/_ws.sum()
-            self._evolve_pop_only(fitnesses)
-
-    def _evolve_with_smoothed_target(self, fitnesses, target_fitness):
-        self._evolve_pop_only(fitnesses)
-
-        self.use_target_flag = False
-
-        if target_fitness > max(fitnesses):
-            self.mean = self.mean*(1-self.tau) + \
-                self.target_weights_flat*self.tau
-
-            self.use_target_flag = True
 
     @override(NeuroEvolution)
     def get_iteration_results(self):
         data = super().get_iteration_results()
 
-        target_weights = self.get_target_weights()
-        # record target_weights_flat to calc the distance between pop mean
-        self.target_weights_flat = self.flatten_weights(target_weights)
-
         data.update({
             "target_pop_l2_distance": np.linalg.norm(self.target_weights_flat-self.mean, ord=2),
             "prev_target_pop_l2_distance": np.linalg.norm(self.prev_target_weights_flat-self.mean, ord=2),
-            # "update_ratio": self.update_ratio,
-            # "grad_norm": self.grad_norm,
-            # "dir_norm": self.direction_norm,
-            "target_noise_l2_norm": self.target_noise_l2_norm,
-            "noise_l2_norm": self.noise_l2_norm,
-            "update_target_flag": self.use_target_flag
+            "sensitivity_min": np.min(self.sensitivity, axis=1),
+            "sensitivity_max": np.max(self.sensitivity, axis=1)
         })
 
         return data
@@ -348,3 +254,7 @@ class ES(NeuroEvolution):
             self.pop_flat[i] = self.flatten_weights(self.pop[i])
 
         self.mean = state["mean"]
+
+    @staticmethod
+    def _get_mutation_sensitivity(worker: RolloutWorker, mutation_batch_size):
+        return worker.get_policy().calc_sensitivity(mutation_batch_size)

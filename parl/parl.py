@@ -17,9 +17,14 @@ from ray.rllib.utils.metrics.learner_info import LearnerInfoBuilder
 from ray.tune.execution.placement_groups import PlacementGroupFactory
 
 
-from parl.rollout import synchronous_parallel_sample, flatten_batches
+from parl.rollout import (
+    synchronous_parallel_sample,
+    synchronous_parallel_sample_mod,
+    flatten_batches
+)
 from parl.learner_thread import MultiGPULearnerThread
-from parl.ea import (NeuroEvolution, CEM, NES, ES,
+from parl.ea import (NeuroEvolution,
+                     CEM, NES, ES, SafeES,
                      GA, CEMPure, HybridES, NESPure)
 from parl.utils import ray_wait
 
@@ -53,8 +58,8 @@ evolver_algo = {
     "cem": CEM,
     "cem-pure": CEMPure,
     "hybrid-es": HybridES,
-    'nes-pure': NESPure
-}
+    'nes-pure': NESPure,
+    "safe-es": SafeES}
 
 
 def make_learner_thread(local_worker, config):
@@ -190,7 +195,7 @@ class PaRL:
         local_worker = self.workers.local_worker()
 
         # Step 1: Sample episodes from workers.
-        target_sample_batches, pop_sample_batches = synchronous_parallel_sample(
+        target_sample_batches, pop_sample_batches = synchronous_parallel_sample_mod(
             target_worker_set=self.workers,
             pop_worker_set=self.pop_workers,
             episodes_per_worker=self.config["episodes_per_worker"]
@@ -473,7 +478,7 @@ class PaRL:
 
         if hasattr(self, "evolver"):
             state["pop_data"] = self.evolver.save()
-            
+
         return state
 
     @override(Algorithm)

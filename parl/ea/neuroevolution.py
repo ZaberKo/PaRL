@@ -28,8 +28,8 @@ class NeuroEvolution:
         self.target_weights = None
 
     def evolve(self, fitnesses, **kwargs):
-        self.fitnesses=fitnesses
-        self.generation +=1
+        self.fitnesses = fitnesses
+        self.generation += 1
         with self.evolve_timer:
             self._evolve(fitnesses.copy(), **kwargs)
 
@@ -38,7 +38,8 @@ class NeuroEvolution:
 
     def get_target_weights(self):
         with self.load_target_weights_timer:
-            self.target_weights = self.get_evolution_weights(self.target_worker)
+            self.target_weights = self.get_evolution_weights(
+                self.target_worker)
 
         return self.target_weights
 
@@ -66,7 +67,7 @@ class NeuroEvolution:
         return {
             "generation": self.generation,
             "fitness": self.fitnesses
-            }
+        }
 
     def save(self):
         return {

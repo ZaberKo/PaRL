@@ -14,6 +14,9 @@ from .td3_loss import (
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.typing import ModelWeights
 
+from ray.rllib.utils.replay_buffers.replay_buffer import ReplayBuffer
+from ray.rllib.policy.sample_batch import SampleBatch, concat_samples
+
 
 class TD3EvolveMixin:
     """
@@ -26,28 +29,102 @@ class TD3EvolveMixin:
         self.num_evolve_params = 0
 
         for name, param in self.model.action_model.named_parameters():
-            self.params_shape[name] = param.size()
-            self.num_evolve_params += param.numel()
+            if self._filter(name, param):
+                self.params_shape[name] = param.size()
+                self.num_evolve_params += param.numel()
 
-    def _filter(self, state_dict: ModelWeights):
+    def _filter(self, name, param):
+        if "layer_norm" in name:
+            return False
+        
+        return True
+
+    def _get_evolution_weights(self) -> ModelWeights:
+        # only need learnable weights in policy(actor)
+        state_dict = dict(self.model.action_model.named_parameters())
         new_state_dict = {}
         for name, param in state_dict.items():
-            if "layer_norm" in name:
-                continue
-            new_state_dict[name] = param
+            if self._filter(name,param):
+                new_state_dict[name] = param
 
         return new_state_dict
 
     def get_evolution_weights(self) -> ModelWeights:
-        # only need learnable weights in policy(actor)
-        state_dict = dict(self.model.action_model.named_parameters())
-
-        return convert_to_numpy(self._filter(state_dict))
+        return convert_to_numpy(self._get_evolution_weights())
 
     def set_evolution_weights(self, weights: ModelWeights):
         state_dict = convert_to_torch_tensor(weights)
 
         self.model.action_model.load_state_dict(state_dict, strict=False)
+
+
+class TD3EvolveMixinWithSM(TD3EvolveMixin):
+    def __init__(self, replay_buffer_capacity=1000):
+        super().__init__()
+        # self.gene_replay_buffer = ReplayBuffer(
+        #     capacity=replay_buffer_capacity, storage_unit="timesteps")
+        self.last_samples = []
+
+    def add_to_gene_replay_buffer(self, batches):        
+        # for batch in batches:
+        #     self.gene_replay_buffer.add(batch)
+
+        self.last_samples = batches
+
+    def calc_sensitivity(self, mutation_batch_size):
+        self.model.train()
+
+        # batch = self.gene_replay_buffer.sample(num_items=mutation_batch_size)
+        batch = concat_samples(self.last_samples).shuffle()[:mutation_batch_size]
+
+        device =self.devices[0]
+
+        batch.set_training(True)
+        self._lazy_tensor_dict(batch, device=device)
+
+        input_dict = SampleBatch(
+            obs=batch[SampleBatch.CUR_OBS], _is_training=True
+        )
+        # dummy function, return obs_flat
+        model_out_t, _ = self.model(input_dict, [], None)
+
+        policy_t = self.model.get_policy_output(model_out_t)
+
+        num_actions = policy_t.shape[1]
+
+        jacobian = torch.zeros(num_actions, self.num_evolve_params).to(device)
+        grad_output = torch.zeros_like(policy_t).to(device)
+
+        for i in range(num_actions):
+            self.model.zero_grad()
+            grad_output.zero_()
+            grad_output[:,i]=1.0
+
+            policy_t.backward(grad_output, retain_graph=True)
+            jacobian[i]=self._get_evolve_param_flatten_grad()
+
+        sensitivity = torch.sqrt(torch.pow(jacobian,2).sum(0))
+        # sensitivity[sensitivity==0] = 1.0
+        sensitivity[sensitivity<0.01] = 0.01
+
+        return sensitivity.numpy()
+
+    def _get_evolve_param_flatten_grad(self):
+        state_dict = dict(self.model.action_model.named_parameters())
+
+        device =self.devices[0]
+        grad = torch.zeros(self.num_evolve_params,dtype=torch.float32).to(device)
+
+        pos = 0
+        for name, param in state_dict.items():
+            if self._filter(name,param):
+                assert param.grad is not None
+                param_size = param.numel()
+                grad[pos:pos+param_size] = param.grad.flatten()
+                pos +=param_size
+
+        return grad
+        
 
 
 class TargetNetworkMixin:
