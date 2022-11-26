@@ -1,4 +1,6 @@
-env: "HalfCheetah-v3"
+env: "Swimmer-v3"
+gamma: 0.9999
+
 
 num_rollout_workers: 0
 num_eval_workers: 10

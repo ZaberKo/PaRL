@@ -24,6 +24,8 @@ from ray.rllib.utils.debug import summarize
 class Config:
     env: str = "HalfCheetah-v3"
 
+    gamma: float = 0.99 #default
+
     num_rollout_workers: int = 0
     num_eval_workers: int = 16
 
@@ -78,6 +80,7 @@ def generate_algo_config(config: Config):
     )
     td3_config = td3_config.training(
         # grad_clip=config.grad_clip,
+        gamma=config.gamma,
         critic_lr=3e-4,
         actor_lr=3e-4,
         tau=5e-3,
@@ -90,7 +93,7 @@ def generate_algo_config(config: Config):
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),
             # How many steps of the model to sample before learning starts.
-            "learning_starts": 1000,
+            "learning_starts": 10000,
         }
     )
     td3_config = td3_config.resources(
