@@ -52,6 +52,12 @@ class NeuroEvolution:
                     self.set_evolution_weights, weights=weights))
             ray_wait(pendings)
 
+    def after_RL_training(self):
+        """
+            callback function: EA->RL->this
+        """
+        pass
+
     def stats(self):
         data = {
             "evolution_timer": {

@@ -2,7 +2,7 @@ import numpy as np
 from ray.rllib.utils.typing import ModelWeights
 
 
-def mutate_inplace(gene: ModelWeights, weight_magnitude: float):
+def mutate_inplace(gene: ModelWeights, weight_magnitude: float=1e6):
     mut_strength = 0.1
     num_mutation_frac = 0.1
     super_mut_strength = 10
@@ -28,7 +28,7 @@ def mutate_inplace(gene: ModelWeights, weight_magnitude: float):
             if np.random.rand() < ssne_probabilities[i]:
                 # Number of mutation instances
                 num_mutations = np.ceil(
-                    num_mutation_frac * num_weights).astype(np.int)
+                    num_mutation_frac * num_weights).astype(int)
                 for _ in range(num_mutations):
                     ind_dim1 = np.random.randint(0, W.shape[0])
                     ind_dim2 = np.random.randint(0, W.shape[-1])
