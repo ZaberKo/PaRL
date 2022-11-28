@@ -25,7 +25,8 @@ from parl.rollout import (
 from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import (NeuroEvolution,
                      CEM, NES, ES, SafeES,
-                     GA, CEMPure, HybridES, NESPure)
+                     GA, GAMod, 
+                     CEMPure, HybridES, NESPure)
 from parl.utils import ray_wait
 
 from ray.rllib.utils.annotations import override
@@ -55,6 +56,7 @@ evolver_algo = {
     "nes": NES,
     "es": ES,
     "ga": GA,
+    "ga-mod": GAMod,
     "cem": CEM,
     "cem-pure": CEMPure,
     "hybrid-es": HybridES,

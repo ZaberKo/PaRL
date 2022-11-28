@@ -9,8 +9,7 @@ def mutate_inplace(gene: ModelWeights, weight_magnitude: float=1e6):
     super_mut_prob = 0.05
     reset_prob = super_mut_prob + 0.05
 
-    num_params = len(gene)
-    ssne_probabilities = np.random.uniform(0, 1, num_params) * 2
+    ssne_probabilities = np.random.uniform(0, 1, len(gene)) * 2
 
     # mutate_count = 0
     for i, (name, W) in enumerate(gene.items()):  # Mutate each param
@@ -73,3 +72,10 @@ def mutate_inplace(gene: ModelWeights, weight_magnitude: float=1e6):
             pass
 
     # print(f"mutated number of params: {mutate_count}")
+
+def gaussian_mutate_inplace(gene: ModelWeights, mutation_std: float = 0.01):
+    for name, W in gene.items():
+        if len(W.shape) <= 2:
+            num_weights = W.size
+            noise = np.random.randn(*W.shape)
+            W += noise

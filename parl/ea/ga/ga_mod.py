@@ -3,7 +3,7 @@ import ray
 
 from parl.utils import ray_wait, clone_numpy_weights
 from parl.ea.neuroevolution import NeuroEvolution
-from .mutation import mutate_inplace
+from .mutation import gaussian_mutate_inplace
 from .crossover import crossover_inplace
 from .selection import selection_tournament
 from ray.rllib.utils.annotations import override
@@ -14,38 +14,10 @@ from ray.rllib.evaluation.worker_set import WorkerSet
 from ray.rllib.utils.typing import ModelWeights
 from typing import List, Dict
 
-
-class GASelectionState:
-    def __init__(self) -> None:
-        self.elite = 0
-        self.selected = 0
-        self.discarded = 0
-        self.total = 0
-
-        self.target_agent_id = None
-
-    def record(self, target_id, elitists, selects, unselects):
-        self.total += 1
-
-        if target_id in elitists:
-            self.elite += 1
-        elif target_id in selects:
-            self.selected += 1
-        elif target_id in unselects:
-            self.discarded += 1
-
-    def stats(self):
-        if self.total <= 0:
-            return {}
-        else:
-            return {
-                "elite": self.elite/self.total,
-                "selected": self.selected/self.total,
-                "discarded": self.discarded/self.total,
-            }
+from .ga import GASelectionState
 
 
-class GA(NeuroEvolution):
+class GAMod(NeuroEvolution):
     def __init__(self, config, pop_workers: WorkerSet, target_worker: RolloutWorker):
         super().__init__(config, pop_workers, target_worker)
 
@@ -53,9 +25,8 @@ class GA(NeuroEvolution):
         self.migration_start = config["migration_start"]
 
         self.elite_fraction = config["elite_fraction"]
-        self.crossover_prob = config["crossover_prob"]
         self.mutation_prob = config["mutation_prob"]
-        self.mutation_weight_magnitude = config.get("mutation_magnitude", 1e6)
+        self.mutation_std = config["mutation_std"]
 
         self.num_elitists = max(
             int(self.elite_fraction * self.pop_size), 1)
@@ -103,8 +74,7 @@ class GA(NeuroEvolution):
         if self.target_id is not None:
             self.target_selection_stat.record(
                 self.target_id, elitists, selects, unselects)
-            self.target_fitness=fitnesses[self.target_id]
-        
+            self.target_fitness = fitnesses[self.target_id]
 
         # Elitism step, replace unselects by elites
         new_elitists = []
@@ -116,32 +86,13 @@ class GA(NeuroEvolution):
             new_elitists.append(replacee)
             self.clone_pop_weights(src=i, dst=replacee)
 
-        # Crossover for remaining unselected genes with 100 percent probability
-        if len(unselects) % 2 != 0:
-            # Ensure the number of unselects left should be even
-            unselects.append(np.random.choice(unselects))
-        for i, j in zip(unselects[0::2], unselects[1::2]):
-            off_i = np.random.choice(new_elitists)
-            off_j = np.random.choice(selects)
-
-            self.clone_pop_weights(src=off_i, dst=i)  # pop[i] = pop[off_i]
-            self.clone_pop_weights(src=off_j, dst=j)
-
-            crossover_inplace(self.pop[i], self.pop[j])
-
-        # Crossover for selected offsprings
-        for i, j in zip(selects[0::2], selects[1::2]):
-            if np.random.rand() < self.crossover_prob:
-                crossover_inplace(self.pop[i], self.pop[j])
-
         # Mutate all genes in the population except the new elitists
         for i in range(self.pop_size):
             if i not in new_elitists:  # Spare the new elitists
                 if np.random.rand() < self.mutation_prob:
-                    mutate_inplace(self.pop[i], self.mutation_weight_magnitude)
+                    gaussian_mutate_inplace(self.pop[i], self.mutation_std)
 
         # delay sync_pop_weights() after RL
-        
 
     def after_RL_training(self):
         # Lamarckian Transfer
