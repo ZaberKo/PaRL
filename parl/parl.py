@@ -270,7 +270,12 @@ class PaRL:
 
         # step 5: retrieve train_results from learner thread
         train_results = self._retrieve_trained_results(real_num_train_batches)
+
         if self.pop_size > 0:
+            # (optional step): callback of evolver
+            # Note: used for GA-Lamarckian Transfer
+            self.evolver.after_RL_training()
+
             ea_results = self.evolver.get_iteration_results()
 
             evaluate_this_iter = (
@@ -285,9 +290,6 @@ class PaRL:
                 "ea_results": ea_results
             })
 
-        # (optional step): callback of evolver
-        # Note: used for GA-Lamarckian Transfer
-        self.evolver.after_RL_training()
 
         # step 6: sync target agent weights to its rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
