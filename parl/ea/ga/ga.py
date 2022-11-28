@@ -27,13 +27,12 @@ class GASelectionState:
     def record(self, target_id, elitists, selects, unselects):
         self.total += 1
 
-        if self.rl_policy in elitists:
-            self.elite += 1.0
-        elif self.rl_policy in selects:
-            self.selected += 1.0
-        elif self.rl_policy in unselects:
-            self.discarded += 1.0
-        self.rl_policy = None
+        if target_id in elitists:
+            self.elite += 1
+        elif target_id in selects:
+            self.selected += 1
+        elif target_id in unselects:
+            self.discarded += 1
 
     def stats(self):
         if self.total <= 0:
