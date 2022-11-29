@@ -58,7 +58,7 @@ ea_config:
   # noise_stdev: 0.01
   # parent_ratio: 0.5
   # GAMod
-  migration_freq: 10
+  migration_freq: 1
   migration_start: 0
   elite_fraction: 0.1
   mutation_prob: 0.9

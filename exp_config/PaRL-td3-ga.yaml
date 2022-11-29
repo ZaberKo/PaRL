@@ -43,7 +43,7 @@ ea_config:
   # noise_init: !!float 1e-3
   # noise_end: !!float 1e-5
   # GA
-  migration_freq: 10
+  migration_freq: 1
   migration_start: 0
   elite_fraction: 0.1
   crossover_prob: 0
