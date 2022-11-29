@@ -76,6 +76,5 @@ def mutate_inplace(gene: ModelWeights, weight_magnitude: float=1e6):
 def gaussian_mutate_inplace(gene: ModelWeights, mutation_std: float = 0.01):
     for name, W in gene.items():
         if len(W.shape) <= 2:
-            num_weights = W.size
             noise = np.random.randn(*W.shape)
             W += noise
