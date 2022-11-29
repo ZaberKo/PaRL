@@ -96,12 +96,12 @@ class PaRLBaseConfig:
             "batch_mode": "complete_episodes",
             "rollout_fragment_length": 1
         }
-        self.evolver_algo = 'cem'
+        self.evolver_algo = 'es'
         self.ea_config = {
-            "elite_fraction": 0.5,
-            "noise_decay_coeff": 0.95,
-            "noise_init": 1e-3,
-            "noise_end": 1e-5
+            # "elite_fraction": 0.5,
+            # "noise_decay_coeff": 0.95,
+            # "noise_init": 1e-3,
+            # "noise_end": 1e-5
         }
 
         # learner thread config
