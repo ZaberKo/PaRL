@@ -110,4 +110,4 @@ tuner_config:
   checkpoint_freq: 0 # 0: disable
   keep_checkpoints_num: null
   stopper:
-    num_env_steps_trained: 256000000 # 256*1e6
+    num_env_steps_trained: 768000000 # 256*3e6
