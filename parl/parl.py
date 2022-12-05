@@ -4,11 +4,13 @@ import copy
 import math
 import numpy as np
 
+import torch.nn.functional as F
 import ray
 from ray.exceptions import GetTimeoutError
 from ray.rllib.algorithms import Algorithm
 
 from ray.rllib.evaluation import SampleBatch
+from ray.rllib.policy.sample_batch import concat_samples
 from ray.rllib.evaluation.worker_set import WorkerSet
 from ray.rllib.evaluation.metrics import collect_metrics
 
@@ -25,9 +27,9 @@ from parl.rollout import (
 from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import (NeuroEvolution,
                      CEM, NES, ES, SafeES,
-                     GA, GAMod, 
+                     GA, GAMod,
                      CEMPure, HybridES, NESPure)
-from parl.utils import ray_wait
+from parl.utils import ray_wait, sample_from_sample_batch
 
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.metrics import (
@@ -266,8 +268,6 @@ class PaRL:
         #     train_results,
         # )
 
-
-
         # step 5: retrieve train_results from learner thread
         train_results = self._retrieve_trained_results(real_num_train_batches)
 
@@ -278,6 +278,8 @@ class PaRL:
 
             ea_results = self.evolver.get_iteration_results()
 
+            action_similarity = self._calc_policy_similarity(pop_sample_batches, max_batch_size=256)
+
             evaluate_this_iter = (
                 self.config["evaluation_interval"] is not None
                 and (self.iteration + 1) % self.config["evaluation_interval"] == 0
@@ -287,9 +289,9 @@ class PaRL:
                 ea_results.update(pop_evaluation_metrics)
 
             train_results.update({
-                "ea_results": ea_results
+                "ea_results": ea_results,
+                "pop_action_similarity": action_similarity
             })
-
 
         # step 6: sync target agent weights to its rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
@@ -349,6 +351,27 @@ class PaRL:
             total_rewards /= len(episodes)
             fitnesses.append(total_rewards)
         return fitnesses
+
+    def _calc_policy_similarity(self, pop_sample_batches, max_batch_size=256):
+        local_policy = self.workers.local_worker().get_policy()
+        action_distances = []
+        for batches in pop_sample_batches:
+            batch = concat_samples(batches)
+            if len(batch) > max_batch_size:
+                batch = sample_from_sample_batch(
+                    batch, size=max_batch_size, keys=[SampleBatch.OBS, SampleBatch.ACTIONS])
+
+            indv_actions = batch[SampleBatch.ACTIONS]
+            target_actions, _, _ = local_policy.compute_actions_from_input_dict(
+                SampleBatch({SampleBatch.OBS: batch[SampleBatch.OBS]}),
+                explore=False
+            )
+
+            action_distance = F.mse_loss(
+                input=indv_actions, target=target_actions, reduction="mean")
+            action_distances.append(action_distance)
+
+        return action_distances
 
     @override(Algorithm)
     def _compile_iteration_results(self, *args, **kwargs):
