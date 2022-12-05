@@ -111,8 +111,6 @@ def sample_from_sample_batch(sample_batch, size, keys=None):
 
 
     idx = np.random.choice(len(sample_batch), size=size)
-    print(idx)
-
 
     if keys is None:
         self_as_dict = {k: v for k, v in sample_batch.items()}

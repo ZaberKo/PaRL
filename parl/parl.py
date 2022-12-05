@@ -4,7 +4,6 @@ import copy
 import math
 import numpy as np
 
-import torch.nn.functional as F
 import ray
 from ray.exceptions import GetTimeoutError
 from ray.rllib.algorithms import Algorithm
@@ -367,8 +366,8 @@ class PaRL:
                 explore=False
             )
 
-            action_distance = F.mse_loss(
-                input=indv_actions, target=target_actions, reduction="mean")
+            action_distance = np.square(indv_actions-target_actions).mean()
+
             action_distances.append(action_distance)
 
         return action_distances

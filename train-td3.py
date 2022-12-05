@@ -96,7 +96,7 @@ def main(config, debug=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_file", type=str, default="exp_config/PaRL-td3-ga-debug.yaml")
+    parser.add_argument("--config_file", type=str, default="exp_config/PaRL-td3-es.yaml")
     parser.add_argument("--env", type=str)
     parser.add_argument("--num_samples", type=int)
     parser.add_argument("--debug", action="store_true")
