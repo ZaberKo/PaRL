@@ -92,7 +92,7 @@ class ParamNoise(NeuroEvolution):
 
     @override(NeuroEvolution)
     def _evolve(self, fitnesses, target_fitness):
-        self.mean = self.unflatten_weights(
+        self.mean = self.flatten_weights(
             self.get_target_weights()
         )
 
