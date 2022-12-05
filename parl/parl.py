@@ -27,7 +27,7 @@ from parl.learner_thread import MultiGPULearnerThread
 from parl.ea import (NeuroEvolution,
                      CEM, NES, ES, SafeES,
                      GA, GAMod,
-                     CEMPure, HybridES, NESPure)
+                     CEMPure, HybridES, NESPure, ParamNoise)
 from parl.utils import ray_wait, sample_from_sample_batch
 
 from ray.rllib.utils.annotations import override
@@ -62,7 +62,8 @@ evolver_algo = {
     "cem-pure": CEMPure,
     "hybrid-es": HybridES,
     'nes-pure': NESPure,
-    "safe-es": SafeES}
+    "safe-es": SafeES,
+    "noise": ParamNoise}
 
 
 def make_learner_thread(local_worker, config):
@@ -228,11 +229,12 @@ class PaRL:
             ) for episode in flatten_batches(target_sample_batches)])
             self.evolver.evolve(fitnesses, target_fitness=target_fitness)
 
+            # calculate similarity before target policy updates.
+            action_similarity = self._calc_policy_similarity(pop_sample_batches, max_batch_size=256)
+
         # step 4: sample batches from replay buffer and place them on learner queue
         # Note: training and target network update are happened in learner_thread
 
-        # num_train_batches = round(ts/train_batch_size*5)
-        # num_train_batches = 1000
         # number of updates = the first target_worker sample timesteps
         target_ts = sum([batch.env_steps()
                         for batch in target_sample_batches[0]])
@@ -276,8 +278,6 @@ class PaRL:
             self.evolver.after_RL_training()
 
             ea_results = self.evolver.get_iteration_results()
-
-            action_similarity = self._calc_policy_similarity(pop_sample_batches, max_batch_size=256)
 
             evaluate_this_iter = (
                 self.config["evaluation_interval"] is not None

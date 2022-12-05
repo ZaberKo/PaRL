@@ -21,7 +21,7 @@ from ray.rllib.utils.annotations import override
 #         return np.random.randint(0, len(self.noise) - dim + 1)
 
 
-class ES(NeuroEvolution):
+class ParamNoise(NeuroEvolution):
     """
         paper: Back to basics: Benchmarking canonical evolution strategies for playing atari
     """
@@ -52,10 +52,7 @@ class ES(NeuroEvolution):
         self.sync_pop_weights()
 
         self.target_weights_flat = None
-        self.update_ratio = 1.0
 
-        self.grad_norm = 0
-        self.direction_norm = 0
 
     def generate_pop(self):
         self.noise = np.random.randn(self.pop_size, self.num_params)
@@ -97,7 +94,6 @@ class ES(NeuroEvolution):
     def _evolve(self, fitnesses, target_fitness):
         # self._evolve_pop_only(fitnesses)
         self._evolve_with_target(fitnesses, target_fitness)
-
 
         self.mean = self.unflatten_weights(
             self.get_target_weights()
