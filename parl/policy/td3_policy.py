@@ -102,7 +102,12 @@ def make_td3_models(policy: Policy) -> ModelV2:
     return model
 
 
-class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixinWithSM, TorchPolicyV2):
+class TD3Policy(
+    TD3Learning, 
+    TargetNetworkMixin, 
+    TD3EvolveMixin,
+    # TD3EvolveMixinWithSM, 
+    TorchPolicyV2):
     def __init__(
         self,
         observation_space: gym.spaces.Space,
@@ -126,7 +131,8 @@ class TD3Policy(TD3Learning, TargetNetworkMixin, TD3EvolveMixinWithSM, TorchPoli
 
         TD3Learning.__init__(self)
         TargetNetworkMixin.__init__(self)
-        TD3EvolveMixinWithSM.__init__(self)
+        TD3EvolveMixin.__init__(self)
+        # TD3EvolveMixinWithSM.__init__(self)
 
     @override(Policy)
     def init_view_requirements(self):

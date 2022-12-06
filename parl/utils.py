@@ -15,6 +15,7 @@ from ray.rllib.utils.framework import try_import_torch
 from typing import List
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.algorithms import Algorithm
+from ray.rllib.evaluation import SampleBatch
 from ray.rllib.utils.typing import TensorType, TensorStructType
 from ray.rllib.policy import Policy
 from ray.util.timer import _Timer
@@ -76,9 +77,10 @@ def enable_grad(params: list[torch.Tensor]):
     for param in params:
         param.requires_grad = False
 
+
 @contextlib.contextmanager
 def disable_grad_ctx(params: list[torch.Tensor]):
-    prev_states=[p.requires_grad for p in params]
+    prev_states = [p.requires_grad for p in params]
     try:
         for param in params:
             param.requires_grad = False
@@ -90,11 +92,36 @@ def disable_grad_ctx(params: list[torch.Tensor]):
 
 @contextlib.contextmanager
 def print_time():
-    start_time=time.time()
+    start_time = time.time()
     try:
-        yield 
+        yield
     finally:
         print(f"elapse time: {time.time()-start_time}")
+
+
+def sample_from_sample_batch(sample_batch, size, keys=None):
+    if sample_batch.get(SampleBatch.SEQ_LENS) is not None:
+            raise ValueError(
+                "SampleBatch.shuffle not possible when your data has "
+                "`seq_lens` defined!"
+            )
+
+    if keys is None:
+        keys = sample_batch.keys()
+
+
+    idx = np.random.choice(len(sample_batch), size=size)
+
+    if keys is None:
+        self_as_dict = {k: v for k, v in sample_batch.items()}
+    else:
+        self_as_dict = {k: v for k, v in sample_batch.items() if k in keys}
+    # Note: adv index will create deep copy of the array
+    sampled_dict = tree.map_structure(lambda v: v[idx], self_as_dict)
+
+    new_sample_batch = SampleBatch(sampled_dict)
+
+    return new_sample_batch
 
 
 class CPUInitCallback(DefaultCallbacks):
@@ -107,7 +134,6 @@ class CPUInitCallback(DefaultCallbacks):
         # os.environ["MKL_NUM_THREADS"] = str(num_cpus_for_local_worker)
         # os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_cpus_for_local_worker)
         # os.environ["NUMEXPR_NUM_THREADS"] = str(num_cpus_for_local_worker)
-
 
         torch.set_num_threads(num_cpus_for_local_worker)
 

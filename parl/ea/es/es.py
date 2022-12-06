@@ -68,11 +68,8 @@ class ES(NeuroEvolution):
         self.sync_pop_weights()
 
         self.target_weights_flat = None
-        self.update_ratio = 1.0
         self.prev_target_weights_flat = self.mean.copy()
 
-        self.grad_norm = 0
-        self.direction_norm = 0
         self.use_target_flag = False
 
     def generate_pop(self, init_pop=False):
@@ -122,6 +119,7 @@ class ES(NeuroEvolution):
         # self._evolve_hybrid(fitnesses, target_fitness)
         # self._evolve_with_target_noise(fitnesses, target_fitness)
         self._evolve_always_with_target_noise(fitnesses, target_fitness)
+        # self._evolve_always_first_with_target_noise(fitnesses,target_fitness)
 
         # generate new pop
         self.generate_pop()
@@ -218,7 +216,7 @@ class ES(NeuroEvolution):
 
         # record
         self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
+        # self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
 
         # use weighted recombination from CSA-ES
         if self.ws is None:
@@ -300,24 +298,20 @@ class ES(NeuroEvolution):
     def get_iteration_results(self):
         data = super().get_iteration_results()
 
-        target_weights = self.get_target_weights()
-        # record target_weights_flat to calc the distance between pop mean
-        self.target_weights_flat = self.flatten_weights(target_weights)
-
         data.update({
             "target_pop_l2_distance": np.linalg.norm(self.target_weights_flat-self.mean, ord=2),
             "prev_target_pop_l2_distance": np.linalg.norm(self.prev_target_weights_flat-self.mean, ord=2),
-            # "update_ratio": self.update_ratio,
-            # "grad_norm": self.grad_norm,
-            # "dir_norm": self.direction_norm,
             "target_noise_l2_norm": self.target_noise_l2_norm,
-            "noise_l2_norm": self.noise_l2_norm,
+            # "noise_l2_norm": self.noise_l2_norm,
             "update_target_flag": self.use_target_flag
         })
 
         return data
 
     def set_pop_weights(self, local_worker: RolloutWorker = None, remote_workers=None):
+        """
+            add this method for evaluate mean
+        """
         weights = self.unflatten_weights(self.mean)
 
         if local_worker is not None:

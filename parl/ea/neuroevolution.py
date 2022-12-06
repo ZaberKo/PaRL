@@ -3,7 +3,11 @@ from ray.rllib.evaluation.worker_set import WorkerSet
 from ray.rllib.evaluation import RolloutWorker
 from ray.util.timer import _Timer
 
-from parl.utils import ray_wait, clone_numpy_weights, timer_to_ms
+from parl.utils import (
+    ray_wait, 
+    clone_numpy_weights, 
+    timer_to_ms
+)
 
 from ray.actor import ActorHandle
 from ray.rllib.utils.typing import ModelWeights
