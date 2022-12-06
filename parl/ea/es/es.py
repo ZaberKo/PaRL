@@ -154,7 +154,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], self.noise)
+            np.dot(self.ws, self.noise[parent_ids])
 
     def _evolve_with_target_noise(self, fitnesses, target_fitness):
         """
@@ -182,7 +182,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], noise)
+            np.dot(self.ws, noise[parent_ids])
 
     def _evolve_always_with_target_noise(self, fitnesses, target_fitness):
         """
@@ -216,7 +216,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[new_orders], noise)
+            np.dot(self.ws, noise[parent_ids])
 
     def _evolve_always_first_with_target_noise(self, fitnesses, target_fitness):
         """
@@ -274,7 +274,7 @@ class ES(NeuroEvolution):
             self.ws = _ws/_ws.sum()
 
         self.mean += self.noise_stdev * \
-            np.dot(self.ws[parent_ids], noise)
+            np.dot(self.ws, noise[parent_ids])
 
     # def _evolve_hybrid(self, fitnesses, target_fitness):
     #     if self.generation % 20 == 0:
