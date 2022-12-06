@@ -88,7 +88,7 @@ def generate_algo_config(config: Config):
         target_noise=0.2,
         target_noise_clip=0.5,
         smooth_target_policy=True,
-        train_batch_size=100,
+        train_batch_size=256,
         replay_buffer_config={
             "type": "MultiAgentReplayBuffer",
             "capacity": int(1e6),

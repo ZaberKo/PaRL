@@ -1,5 +1,5 @@
 env: "Swimmer-v3"
-gamma: 0.9999
+gamma: 0.99999
 
 
 num_rollout_workers: 0
@@ -12,7 +12,7 @@ num_cpus_for_rollout_worker: 1
 
 use_gpu: true
 
-num_tests: 3
+num_tests: 5
 training_iteration: 3000
 checkpoint_freq: 10
 evaluation_interval: 2
