@@ -57,6 +57,7 @@ ea_config:
   # ES
   noise_stdev: 0.01
   parent_ratio: 0.5
+  update_strategy: always
 
 
 # ========= evaluation worker config ==========

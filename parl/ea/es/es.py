@@ -24,6 +24,12 @@ from ray.rllib.utils.annotations import override
 #     def sample_index(self, dim):
 #         return np.random.randint(0, len(self.noise) - dim + 1)
 
+class UpdateStrategy:
+    NORMAL = "normal"
+    POP_ONLY = "pop-only"
+    ALWAYS_FIRST = "always-first"
+    ALWAYS = "always"
+
 
 class ES(NeuroEvolution):
     """
@@ -36,7 +42,9 @@ class ES(NeuroEvolution):
 
         self.noise_stdev = config.get("noise_stdev", 0.05)
         self.parent_ratio = config.get("parent_ratio", 0.5)
-        self.tau = config.get("pop_tau", 0.1)
+        # self.tau = config.get("pop_tau", 0.1)
+        self.update_strategy = config.get(
+            "update_strategy", UpdateStrategy.ALWAYS)
 
         self.parent_size = round(self.pop_size*self.parent_ratio)
 
@@ -118,14 +126,24 @@ class ES(NeuroEvolution):
         # self._evolve_with_target(fitnesses, target_fitness)
         # self._evolve_hybrid(fitnesses, target_fitness)
         # self._evolve_with_target_noise(fitnesses, target_fitness)
-        self._evolve_always_with_target_noise(fitnesses, target_fitness)
-        # self._evolve_always_first_with_target_noise(fitnesses,target_fitness)
+        if self.update_strategy == UpdateStrategy.POP_ONLY:
+            self._evolve_pop_only(fitnesses)
+        elif self.update_strategy == UpdateStrategy.NORMAL:
+            self._evolve_with_target(fitnesses, target_fitness)
+        elif self.update_strategy == UpdateStrategy.ALWAYS:
+            self._evolve_always_with_target_noise(fitnesses, target_fitness)
+        elif self.update_strategy == UpdateStrategy.ALWAYS_FIRST:
+            self._evolve_always_first_with_target_noise(
+                fitnesses, target_fitness)
 
         # generate new pop
         self.generate_pop()
         self.sync_pop_weights()
 
     def _evolve_pop_only(self, fitnesses):
+        """
+            No target transfer.
+        """
         fitnesses = np.asarray(fitnesses)
 
         orders = fitnesses.argsort()[::-1]
@@ -141,6 +159,9 @@ class ES(NeuroEvolution):
             np.dot(self.ws, self.noise[parent_ids])
 
     def _evolve_with_target_noise(self, fitnesses, target_fitness):
+        """
+            target is added into the pop and selected by fitness
+        """
         fitnesses.append(target_fitness)
         fitnesses = np.asarray(fitnesses)
 
@@ -169,6 +190,9 @@ class ES(NeuroEvolution):
         self.use_target_flag = True
 
     def _evolve_always_with_target_noise(self, fitnesses, target_fitness):
+        """
+            target is always in the elite list
+        """
         fitnesses = np.asarray(fitnesses)
 
         orders = fitnesses.argsort()[::-1]
@@ -203,6 +227,9 @@ class ES(NeuroEvolution):
         self.use_target_flag = True
 
     def _evolve_always_first_with_target_noise(self, fitnesses, target_fitness):
+        """
+            target is the best elite
+        """
         fitnesses = np.asarray(fitnesses)
 
         orders = fitnesses.argsort()[::-1]
@@ -229,70 +256,64 @@ class ES(NeuroEvolution):
 
         self.use_target_flag = True
 
+    # def _evolve_with_target_noise2(self, fitnesses, target_fitness):
+    #     fitnesses.append(target_fitness)
+    #     fitnesses = np.asarray(fitnesses)
 
+    #     orders = fitnesses.argsort()[::-1]
+    #     parent_ids = orders[:self.parent_size+1]
 
-    def _evolve_with_target_noise2(self, fitnesses, target_fitness):
-        fitnesses.append(target_fitness)
-        fitnesses = np.asarray(fitnesses)
+    #     target_noise = (self.target_weights_flat-self.mean) / self.noise_stdev
 
-        orders = fitnesses.argsort()[::-1]
-        parent_ids = orders[:self.parent_size+1]
+    #     norm = np.linalg.norm(target_noise, ord=2)
+    #     # make sure the target_noise's magnitude is constraint.
+    #     if norm > self.noise_magnitude:
+    #         target_noise = target_noise * (self.noise_magnitude/norm)
 
-        target_noise = (self.target_weights_flat-self.mean) / self.noise_stdev
+    #     noise = np.concatenate([
+    #         self.noise,
+    #         np.expand_dims(target_noise, axis=0)
+    #     ])
 
-        norm = np.linalg.norm(target_noise, ord=2)
-        # make sure the target_noise's magnitude is constraint.
-        if norm > self.noise_magnitude:
-            target_noise = target_noise * (self.noise_magnitude/norm)
-        # if norm ==0:
-        #     target_noise = np.zeros_like(target_noise)
-        # else:
-        #     target_noise = target_noise * (self.noise_magnitude/norm)
+    #     # record
+    #     self.target_noise_l2_norm = np.linalg.norm(target_noise)
+    #     self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
 
-        noise = np.concatenate([
-            self.noise,
-            np.expand_dims(target_noise, axis=0)
-        ])
+    #     # use weighted recombination from CSA-ES
+    #     if self.ws is None:
+    #         parent_size = self.parent_size + 1
+    #         _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
+    #         self.ws = _ws/_ws.sum()
 
-        # record
-        self.target_noise_l2_norm = np.linalg.norm(target_noise)
-        self.noise_l2_norm = [np.linalg.norm(n) for n in self.noise]
+    #     self.mean += self.noise_stdev * \
+    #         np.dot(self.ws, noise[parent_ids])
 
-        # use weighted recombination from CSA-ES
-        if self.ws is None:
-            parent_size = self.parent_size + 1
-            _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
-            self.ws = _ws/_ws.sum()
+    #     self.use_target_flag = True
 
-        self.mean += self.noise_stdev * \
-            np.dot(self.ws, noise[parent_ids])
+    # def _evolve_hybrid(self, fitnesses, target_fitness):
+    #     if self.generation % 20 == 0:
+    #         parent_size = self.parent_size + 1
+    #         _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
+    #         self.ws = _ws/_ws.sum()
 
-        self.use_target_flag = True
+    #         self.prev_target_weights_flat = self.target_weights_flat.copy()
+    #         self._evolve_with_target_noise(fitnesses, target_fitness)
+    #     else:
+    #         _ws = np.log(self.parent_size+0.5) - \
+    #             np.log(np.arange(1, self.parent_size+1))
+    #         self.ws = _ws/_ws.sum()
+    #         self._evolve_pop_only(fitnesses)
 
-    def _evolve_hybrid(self, fitnesses, target_fitness):
-        if self.generation % 20 == 0:
-            parent_size = self.parent_size + 1
-            _ws = np.log(parent_size+0.5)-np.log(np.arange(1, parent_size+1))
-            self.ws = _ws/_ws.sum()
+    # def _evolve_with_smoothed_target(self, fitnesses, target_fitness):
+    #     self._evolve_pop_only(fitnesses)
 
-            self.prev_target_weights_flat = self.target_weights_flat.copy()
-            self._evolve_with_target_noise(fitnesses, target_fitness)
-        else:
-            _ws = np.log(self.parent_size+0.5) - \
-                np.log(np.arange(1, self.parent_size+1))
-            self.ws = _ws/_ws.sum()
-            self._evolve_pop_only(fitnesses)
+    #     self.use_target_flag = False
 
-    def _evolve_with_smoothed_target(self, fitnesses, target_fitness):
-        self._evolve_pop_only(fitnesses)
+    #     if target_fitness > max(fitnesses):
+    #         self.mean = self.mean*(1-self.tau) + \
+    #             self.target_weights_flat*self.tau
 
-        self.use_target_flag = False
-
-        if target_fitness > max(fitnesses):
-            self.mean = self.mean*(1-self.tau) + \
-                self.target_weights_flat*self.tau
-
-            self.use_target_flag = True
+    #         self.use_target_flag = True
 
     @override(NeuroEvolution)
     def get_iteration_results(self):
