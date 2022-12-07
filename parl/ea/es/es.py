@@ -127,7 +127,7 @@ class ES(NeuroEvolution):
         if self.update_strategy == UpdateStrategy.POP_ONLY:
             self._evolve_pop_only(fitnesses)
         elif self.update_strategy == UpdateStrategy.NORMAL:
-            self._evolve_with_target(fitnesses, target_fitness)
+            self._evolve_with_target_noise(fitnesses, target_fitness)
         elif self.update_strategy == UpdateStrategy.ALWAYS:
             self._evolve_always_with_target_noise(fitnesses, target_fitness)
         elif self.update_strategy == UpdateStrategy.ALWAYS_FIRST:
