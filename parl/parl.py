@@ -245,6 +245,7 @@ class PaRL:
             num_train_batches/batch_bulk)*batch_bulk
 
         # print("load train batch phase")
+        skip_training=False
         for _ in range(math.ceil(num_train_batches/batch_bulk)):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(
@@ -253,7 +254,8 @@ class PaRL:
             # replay buffer learning start size not meet
             if train_batch is None or len(train_batch) == 0:
                 self.workers.local_worker().set_global_vars(global_vars)
-                return {}
+                skip_training=True
+                break
 
             # target agent is updated at background thread
             self._learner_thread.inqueue.put(train_batch, block=True)
@@ -270,7 +272,10 @@ class PaRL:
         # )
 
         # step 5: retrieve train_results from learner thread
-        train_results = self._retrieve_trained_results(real_num_train_batches)
+        if skip_training:
+            train_results = {}
+        else:
+            train_results = self._retrieve_trained_results(real_num_train_batches)
 
         if self.pop_size > 0:
             # (optional step): callback of evolver
