@@ -184,3 +184,5 @@ render/*
 !render/.gitkeep
 results/*
 !results/.gitkeep
+
+plots/*

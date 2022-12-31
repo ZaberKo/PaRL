@@ -126,12 +126,15 @@ def smooth(y, radius, mode='two_sided', valid_only=False):
 
 
 # %%
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--path", type=str, default="~/ray_results/SAC_Parallel_2022-10-31_09-35-33/SAC_Parallel_Hopper-v3_4fa66_00000_0_2022-10-31_09-35-33")
-parser.add_argument("--env", type=str, default=None)
-parser.add_argument("--num_episodes", type=int, default=10)
-args = parser.parse_args(args=[])
-main(args)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--path", type=str, default="~/ray_results/SAC_Parallel_2022-10-31_09-35-33/SAC_Parallel_Hopper-v3_4fa66_00000_0_2022-10-31_09-35-33")
+    parser.add_argument("--env", type=str, default=None)
+    parser.add_argument("--num_episodes", type=int, default=10)
+    args = parser.parse_args(
+        # args=[]
+    )
+    main(args)
 
 # %%

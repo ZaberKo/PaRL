@@ -22,7 +22,7 @@
             "justMyCode": false
         },
         {
-            "name": "Train Baseline",
+            "name": "Train Baseline ES",
             "type": "python",
             "request": "launch",
             "program": "${file}",
@@ -31,6 +31,19 @@
             "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
             "args": ["--debug", 
             // "--env", "Hopper-v3"
+        ]
+        },
+        {
+            "name": "Train Baseline GA",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
+            "args": ["--debug", 
+            "--env", "Ant-v3",
+            "--config_file", "exp_config/PaRL-td3-ga.yaml"
         ]
         }
     ]

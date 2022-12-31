@@ -748,4 +748,425 @@
         "gpu_util_percent0": 0.09923076923076923,
         "vram_util_percent0": 0.08826837498166172
     }
+},
+{
+    "custom_metrics": {},
+    "episode_media": {},
+    "num_recreated_workers": 0,
+    "info": {
+        "learner": {},
+        "num_env_steps_sampled": 224,
+        "num_env_steps_trained": 0,
+        "num_agent_steps_sampled": 224,
+        "num_agent_steps_trained": 0,
+        "learner_queue": {
+            "size_count": 0,
+            "size_mean": NaN,
+            "size_std": NaN,
+            "size_quantiles": 0.03707384690642357
+        },
+        "learner_timer": {
+            "learner_grad_time_ms": 0.0,
+            "learner_load_time_ms": 0.0,
+            "learner_load_wait_time_ms": 0.0,
+            "learner_dequeue_time_ms": 0.0,
+            "target_net_update_time_ms": 0.0
+        },
+        "num_target_updates": 0,
+        "evolution_timer": {
+            "evolve_time_ms": 41.438,
+            "load_target_weights_time_ms": 0.955,
+            "sync_pop_weights_time_ms": 12.164
+        }
+    },
+    "sampler_results": {
+        "episode_reward_max": 16.262873649034503,
+        "episode_reward_min": 16.262873649034503,
+        "episode_reward_mean": 16.262873649034503,
+        "episode_len_mean": 15.0,
+        "episode_media": {},
+        "episodes_this_iter": 1,
+        "policy_reward_min": {},
+        "policy_reward_max": {},
+        "policy_reward_mean": {},
+        "custom_metrics": {},
+        "hist_stats": {
+            "episode_reward": [
+                16.262873649034503
+            ],
+            "episode_lengths": [
+                15
+            ]
+        },
+        "sampler_perf": {
+            "mean_raw_obs_processing_ms": 0.47932565212249756,
+            "mean_inference_ms": 0.9820908308029175,
+            "mean_action_processing_ms": 0.11752545833587646,
+            "mean_env_wait_ms": 0.3328174352645874,
+            "mean_env_render_ms": 0.0
+        },
+        "num_faulty_episodes": 0
+    },
+    "episode_reward_max": 16.262873649034503,
+    "episode_reward_min": 16.262873649034503,
+    "episode_reward_mean": 16.262873649034503,
+    "episode_len_mean": 15.0,
+    "episodes_this_iter": 1,
+    "policy_reward_min": {},
+    "policy_reward_max": {},
+    "policy_reward_mean": {},
+    "hist_stats": {
+        "episode_reward": [
+            16.262873649034503
+        ],
+        "episode_lengths": [
+            15
+        ]
+    },
+    "sampler_perf": {
+        "mean_raw_obs_processing_ms": 0.47932565212249756,
+        "mean_inference_ms": 0.9820908308029175,
+        "mean_action_processing_ms": 0.11752545833587646,
+        "mean_env_wait_ms": 0.3328174352645874,
+        "mean_env_render_ms": 0.0
+    },
+    "num_faulty_episodes": 0,
+    "num_healthy_workers": 1,
+    "num_agent_steps_sampled": 224,
+    "num_agent_steps_trained": 0,
+    "num_env_steps_sampled": 224,
+    "num_env_steps_trained": 0,
+    "num_env_steps_sampled_this_iter": 224,
+    "num_env_steps_trained_this_iter": 0,
+    "timesteps_total": 224,
+    "num_steps_trained_this_iter": 0,
+    "agent_timesteps_total": 224,
+    "timers": {
+        "training_iteration_time_ms": 183.733
+    },
+    "counters": {
+        "num_env_steps_sampled": 224,
+        "num_env_steps_trained": 0,
+        "num_agent_steps_sampled": 224,
+        "num_agent_steps_trained": 0
+    },
+    "done": false,
+    "episodes_total": 1,
+    "training_iteration": 1,
+    "trial_id": "d4977_00001",
+    "experiment_id": "b8c0d23af3a1417e8bb8dd56ff7414b5",
+    "date": "2022-12-06_04-11-09",
+    "timestamp": 1670299869,
+    "time_this_iter_s": 0.18767857551574707,
+    "time_total_s": 0.18767857551574707,
+    "pid": 30206,
+    "hostname": "dgx2-rllib3",
+    "node_ip": "172.17.0.4",
+    "time_since_restore": 0.18767857551574707,
+    "timesteps_since_restore": 0,
+    "iterations_since_restore": 1,
+    "warmup_time": 34.0878267288208,
+    "perf": {
+        "cpu_util_percent": 20.1,
+        "ram_util_percent": 5.6,
+        "gpu_util_percent0": 0.0,
+        "vram_util_percent0": 0.056751768686557985
+    }
+},
+{
+    "evaluation": {
+        "episode_reward_max": 794.60746180005,
+        "episode_reward_min": 119.36167748076217,
+        "episode_reward_mean": 664.2725534200242,
+        "episode_len_mean": 1000.0,
+        "episode_media": {},
+        "episodes_this_iter": 10,
+        "policy_reward_min": {},
+        "policy_reward_max": {},
+        "policy_reward_mean": {},
+        "custom_metrics": {},
+        "hist_stats": {
+            "episode_reward": [
+                560.766221644384,
+                652.3773342796236,
+                785.8084810581067,
+                675.7413307276211,
+                765.1353291304257,
+                119.36167748076217,
+                785.6246830196893,
+                794.60746180005,
+                746.7306176502306,
+                756.5723974093502
+            ],
+            "episode_lengths": [
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000
+            ]
+        },
+        "sampler_perf": {
+            "mean_raw_obs_processing_ms": 0.36188155202208205,
+            "mean_inference_ms": 0.9760182974122626,
+            "mean_action_processing_ms": 0.15882011890619982,
+            "mean_env_wait_ms": 0.23887902749686624,
+            "mean_env_render_ms": 0.0
+        },
+        "num_faulty_episodes": 0,
+        "num_agent_steps_sampled_this_iter": 10000,
+        "num_env_steps_sampled_this_iter": 10000,
+        "timesteps_this_iter": 10000,
+        "num_healthy_workers": 10,
+        "num_recreated_workers": 0
+    },
+    "custom_metrics": {},
+    "episode_media": {},
+    "num_recreated_workers": 0,
+    "info": {
+        "learner": {
+            "default_policy": {
+                "learner_stats": {
+                    "critic_gnorm": 12.600914050579071,
+                    "actor_gnorm": 0.47652430790662764,
+                    "actor_loss": -19.458709365844726,
+                    "critic_loss": 0.5188025450110435,
+                    "mean_q": 18.775551008224486,
+                    "max_q": 28.926959991455078,
+                    "min_q": -19.90519905090332
+                },
+                "max_td_error": 6.568532466888428,
+                "min_td_error": 0.0003528594970703125,
+                "mean_td_error": 0.37658964756131175,
+                "model": {},
+                "custom_metrics": {},
+                "num_agent_steps_trained": 256.0
+            },
+            "ea_results": {
+                "generation": 16,
+                "fitness": [
+                    630.8524169921875,
+                    759.9939575195312,
+                    696.7809448242188,
+                    662.604248046875,
+                    778.3785400390625,
+                    717.825439453125,
+                    724.2669677734375,
+                    714.1325073242188,
+                    652.0236206054688,
+                    691.3530883789062
+                ],
+                "target_pop_l2_distance": 13.231145858764648,
+                "target_noise_l2_norm": 1338.5831298828125,
+                "pop_evaluation": {
+                    "episode_reward_max": 779.1371132954697,
+                    "episode_reward_min": 743.7288830252795,
+                    "episode_reward_mean": 762.7154302431242,
+                    "episode_len_mean": 1000.0,
+                    "episode_media": {},
+                    "episodes_this_iter": 10,
+                    "policy_reward_min": {},
+                    "policy_reward_max": {},
+                    "policy_reward_mean": {},
+                    "custom_metrics": {},
+                    "hist_stats": {
+                        "episode_reward": [
+                            753.6527069831661,
+                            760.0493025131383,
+                            779.1371132954697,
+                            755.0966709500243,
+                            760.3511469897448,
+                            767.66403610474,
+                            767.789324614424,
+                            767.395674046473,
+                            743.7288830252795,
+                            772.289443908782
+                        ],
+                        "episode_lengths": [
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000,
+                            1000
+                        ]
+                    },
+                    "sampler_perf": {
+                        "mean_raw_obs_processing_ms": 0.35920518373268523,
+                        "mean_inference_ms": 0.9729034892241721,
+                        "mean_action_processing_ms": 0.1584034603076429,
+                        "mean_env_wait_ms": 0.23817361239536344,
+                        "mean_env_render_ms": 0.0
+                    },
+                    "num_faulty_episodes": 0,
+                    "num_agent_steps_sampled_this_iter": 10000,
+                    "num_env_steps_sampled_this_iter": 10000,
+                    "timesteps_this_iter": 10000
+                }
+            },
+            "pop_action_similarity": [
+                0.1250232607126236,
+                0.08064401894807816,
+                0.06057864427566528,
+                0.16934417188167572,
+                0.0694267675280571,
+                0.12278158217668533,
+                0.08049631863832474,
+                0.07789308577775955,
+                0.1252068281173706,
+                0.09287611395120621
+            ]
+        },
+        "num_env_steps_sampled": 176000,
+        "num_env_steps_trained": 4096000,
+        "num_agent_steps_sampled": 176000,
+        "num_agent_steps_trained": 4096000,
+        "num_samples_added_to_queue": 16000000,
+        "learner_queue": {
+            "size_count": 16000,
+            "size_mean": 7.02,
+            "size_std": 8.645206764444678,
+            "size_quantiles": [
+                0.0,
+                0.0,
+                1.5,
+                21.1,
+                26.0
+            ]
+        },
+        "learner_timer": {
+            "learner_grad_time_ms": 21.656,
+            "learner_load_time_ms": 2.427,
+            "learner_load_wait_time_ms": 0.011,
+            "learner_dequeue_time_ms": 0.008,
+            "target_net_update_time_ms": 1.487
+        },
+        "num_target_updates": 8000,
+        "evolution_timer": {
+            "evolve_time_ms": 63.827,
+            "load_target_weights_time_ms": 16.578,
+            "sync_pop_weights_time_ms": 16.252
+        }
+    },
+    "sampler_results": {
+        "episode_reward_max": -206.20401478230903,
+        "episode_reward_min": -423.2962211967437,
+        "episode_reward_mean": -287.93929615162415,
+        "episode_len_mean": 1000.0,
+        "episode_media": {},
+        "episodes_this_iter": 1,
+        "policy_reward_min": {},
+        "policy_reward_max": {},
+        "policy_reward_mean": {},
+        "custom_metrics": {},
+        "hist_stats": {
+            "episode_reward": [
+                -423.2962211967437,
+                -206.20401478230903,
+                -313.4985598383601,
+                -255.70335097846765,
+                -240.99433396224038
+            ],
+            "episode_lengths": [
+                1000,
+                1000,
+                1000,
+                1000,
+                1000
+            ]
+        },
+        "sampler_perf": {
+            "mean_raw_obs_processing_ms": 0.3807804174101367,
+            "mean_inference_ms": 1.0637109742299846,
+            "mean_action_processing_ms": 0.1509625868463738,
+            "mean_env_wait_ms": 0.22669189439745158,
+            "mean_env_render_ms": 0.0
+        },
+        "num_faulty_episodes": 0
+    },
+    "episode_reward_max": -206.20401478230903,
+    "episode_reward_min": -423.2962211967437,
+    "episode_reward_mean": -287.93929615162415,
+    "episode_len_mean": 1000.0,
+    "episodes_this_iter": 1,
+    "policy_reward_min": {},
+    "policy_reward_max": {},
+    "policy_reward_mean": {},
+    "hist_stats": {
+        "episode_reward": [
+            -423.2962211967437,
+            -206.20401478230903,
+            -313.4985598383601,
+            -255.70335097846765,
+            -240.99433396224038
+        ],
+        "episode_lengths": [
+            1000,
+            1000,
+            1000,
+            1000,
+            1000
+        ]
+    },
+    "sampler_perf": {
+        "mean_raw_obs_processing_ms": 0.3807804174101367,
+        "mean_inference_ms": 1.0637109742299846,
+        "mean_action_processing_ms": 0.1509625868463738,
+        "mean_env_wait_ms": 0.22669189439745158,
+        "mean_env_render_ms": 0.0
+    },
+    "num_faulty_episodes": 0,
+    "num_healthy_workers": 1,
+    "num_agent_steps_sampled": 176000,
+    "num_agent_steps_trained": 4096000,
+    "num_env_steps_sampled": 176000,
+    "num_env_steps_trained": 4096000,
+    "num_env_steps_sampled_this_iter": 11000,
+    "num_env_steps_trained_this_iter": 256000,
+    "timesteps_total": 176000,
+    "num_steps_trained_this_iter": 256000,
+    "agent_timesteps_total": 176000,
+    "timers": {
+        "training_iteration_time_ms": 37461.387,
+        "synch_weights_time_ms": 4.932
+    },
+    "counters": {
+        "num_env_steps_sampled": 176000,
+        "num_env_steps_trained": 4096000,
+        "num_agent_steps_sampled": 176000,
+        "num_agent_steps_trained": 4096000,
+        "num_samples_added_to_queue": 16000000
+    },
+    "done": false,
+    "episodes_total": 16,
+    "training_iteration": 16,
+    "trial_id": "d1aec_00000",
+    "experiment_id": "f54260b106bb48c88a0ee252c70c1e93",
+    "date": "2022-12-06_04-22-36",
+    "timestamp": 1670300556,
+    "time_this_iter_s": 40.88148045539856,
+    "time_total_s": 589.2742118835449,
+    "pid": 45709,
+    "hostname": "dgx2-rllib2",
+    "node_ip": "172.17.0.3",
+
+    "time_since_restore": 589.2742118835449,
+    "timesteps_since_restore": 0,
+    "iterations_since_restore": 16,
+    "warmup_time": 35.802698612213135,
+    "perf": {
+        "cpu_util_percent": 58.58571428571429,
+        "ram_util_percent": 14.922857142857142,
+        "gpu_util_percent0": 0.5774285714285714,
+        "vram_util_percent0": 0.14487849892340815
+    }
 }
