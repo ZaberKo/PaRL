@@ -177,3 +177,69 @@ class GA(NeuroEvolution):
         })
 
         return data
+
+
+class GAPure(GA):
+    @override(NeuroEvolution)
+    def _evolve(self, fitnesses: List[Dict], target_fitness):
+        # Entire epoch is handled with indices; Index rank nets by fitness evaluation (0 is the best after reversing)
+        # index from largest fitness to smallest
+        index_rank = np.argsort(fitnesses)[::-1]
+        elitists = index_rank[:self.num_elitists]  # Elitist indexes
+        selects = selection_tournament(
+            index_rank,
+            num_offsprings=self.pop_size-self.num_elitists,
+            tournament_size=3
+        )
+
+        self.best_id = index_rank[0]
+        self.worst_id = index_rank[-1]
+
+        # Figure out unselected candidates
+        unselects = []
+        for i in range(self.pop_size):
+            if i in selects or i in elitists:
+                continue
+            else:
+                unselects.append(i)
+        np.random.shuffle(unselects) 
+
+        # Elitism step, replace unselects by elites
+        new_elitists = []
+        for i in elitists:
+            if len(unselects):
+                replacee = unselects.pop(0)
+            else:
+                replacee = selects.pop(0)
+            new_elitists.append(replacee)
+            self.clone_pop_weights(src=i, dst=replacee)
+
+        # Crossover for remaining unselected genes with 100 percent probability
+        if len(unselects) % 2 != 0:
+            # Ensure the number of unselects left should be even
+            unselects.append(np.random.choice(unselects))
+        for i, j in zip(unselects[0::2], unselects[1::2]):
+            off_i = np.random.choice(new_elitists)
+            off_j = np.random.choice(selects)
+
+            self.clone_pop_weights(src=off_i, dst=i)  # pop[i] = pop[off_i]
+            self.clone_pop_weights(src=off_j, dst=j)
+
+            crossover_inplace(self.pop[i], self.pop[j])
+
+        # Crossover for selected offsprings
+        for i, j in zip(selects[0::2], selects[1::2]):
+            if np.random.rand() < self.crossover_prob:
+                crossover_inplace(self.pop[i], self.pop[j])
+
+        # Mutate all genes in the population except the new elitists
+        for i in range(self.pop_size):
+            if i not in new_elitists:  # Spare the new elitists
+                if np.random.rand() < self.mutation_prob:
+                    mutate_inplace(self.pop[i], self.mutation_weight_magnitude)
+
+        # no-delay sync_pop_weights() after RL
+        self.sync_pop_weights()
+
+    def get_iteration_results(self):
+        return super(GA, self).get_iteration_results()

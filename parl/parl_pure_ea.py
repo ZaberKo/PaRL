@@ -58,7 +58,7 @@ class PaRL_PureEA:
         )
         if self.pop_size > 0:
             self.ea_config = self.config["ea_config"]
-            evolver_cls = evolver_algo[self.config.get("evolver_algo", "cem")]
+            evolver_cls = evolver_algo[self.config["evolver_algo"]]
             self.evolver: NeuroEvolution = evolver_cls(
                 self.ea_config, self.pop_workers, self.workers.local_worker())
 
@@ -79,12 +79,10 @@ class PaRL_PureEA:
         sample_batches = flatten_batches(target_sample_batches) + \
             flatten_batches(pop_sample_batches)
 
-        # ts = 0  # total sample steps in the iteration
         for batch in sample_batches:
             # Update sampling step counters.
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.env_steps()
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
-            # ts += batch.env_steps()
             # Store new samples in the replay buffer
             # Use deprecated add_batch() to support old replay buffers for now
             # self.local_replay_buffer.add(batch)
@@ -93,58 +91,29 @@ class PaRL_PureEA:
             "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
         }
 
-        # step 3: sample batches from replay buffer and place them on learner queue
-        # num_train_batches = round(ts/train_batch_size*5)
-        # num_train_batches = 1000
-        # num_train_batches = round(ts/10)
-        # for _ in range(num_train_batches):
-        #     logger.info(f"add {num_train_batches} batches to learner thread")
-        #     train_batch = self.local_replay_buffer.sample(train_batch_size)
+        # step 3: apply NE
+        fitnesses = self._calc_fitness(pop_sample_batches)
 
-        #     # replay buffer learning start size not meet
-        #     if train_batch is None or len(train_batch) == 0:
-        #         self.workers.local_worker().set_global_vars(global_vars)
-        #         return {}
+        self.evolver.evolve(fitnesses, target_fitness=None)
+        # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
+        #     # set pop workers with new generated indv weights
+        #     self.evolver.sync_pop_weights()
 
-        #     # target agent is updated at background thread
-        #     self._learner_thread.inqueue.put(train_batch, block=True)
-        #     self._counters[NUM_SAMPLES_ADDED_TO_QUEUE] += (
-        #         batch.agent_steps() if self._by_agent_steps else batch.count
-        #     )
+        # sync pop weights to workers.local_worker; then `evaluate()` will sync them to evaluation_workers
+        self.evolver.set_pop_weights(
+            local_worker=local_worker
+        )
 
-        # step 4: apply NE
-        if self.pop_size > 0:
-            fitnesses = self._calc_fitness(pop_sample_batches)
-            # target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
-            # ) for episode in flatten_batches(target_sample_batches)])
-
-            self.evolver.evolve(fitnesses, target_fitness=None)
-            # with self._timers[SYNCH_POP_WORKER_WEIGHTS_TIMER]:
-            #     # set pop workers with new generated indv weights
-            #     self.evolver.sync_pop_weights()
-
-            # sync pop weights to workers.local_worker; then `evaluate()` will sync them to evaluation_workers
-            self.evolver.set_pop_weights(
-                local_worker=local_worker
-            )
-
-        # Update replay buffer priorities.
-        # update_priorities_in_replay_buffer(
-        #     self.local_replay_buffer,
-        #     self.config,
-        #     train_batch,
-        #     train_results,
-        # )
-
-        # step 5: retrieve train_results from learner thread and update target network
+        # step 4: retrieve train_results from learner thread and update target network
         # train_results = self._process_trained_results()
         train_results = {}
-        if self.pop_size > 0:
-            train_results.update({
-                "ea_results": self.evolver.get_iteration_results()
-            })
 
-        # step 6: sync target agent weights to rollout workers
+        self.evolver.after_RL_training()
+        train_results.update({
+            "ea_results": self.evolver.get_iteration_results()
+        })
+
+        # step 5: sync target agent weights to rollout workers
         # Update weights and global_vars - after learning on the local worker - on all
         # remote workers.
         with self._timers[SYNCH_WORKER_WEIGHTS_TIMER]:
@@ -152,12 +121,10 @@ class PaRL_PureEA:
 
         # Return all collected metrics for the iteration.
         return train_results
-    
-    
-    
+
     def _compile_iteration_results(self, *args, **kwargs):
         result = super(PaRL, self)._compile_iteration_results(*args, **kwargs)
-        
+
         if self.pop_size > 0:
             result["info"].update(
                 self.evolver.stats()
@@ -167,6 +134,7 @@ class PaRL_PureEA:
 
 class PaRL_SAC_PureEA(PaRL_PureEA, PaRL_SAC):
     pass
+
 
 class PaRL_TD3_PureEA(PaRL_PureEA, PaRL_TD3):
     pass

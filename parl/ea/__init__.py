@@ -1,7 +1,7 @@
 from parl.ea.neuroevolution import NeuroEvolution
 
 from parl.ea.cem.cem import CEM, CEMPure
-from parl.ea.ga.ga import GA
+from parl.ea.ga.ga import GA, GAPure
 from parl.ea.ga.ga_mod import GAMod
 from parl.ea.es.nes import NES, NESPure
 from parl.ea.es.es import ES
