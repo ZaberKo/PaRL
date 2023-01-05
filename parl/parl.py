@@ -225,12 +225,14 @@ class PaRL:
         # Note: put EA ahead for correct target_weights
         if self.pop_size > 0:
             fitnesses = self._calc_fitness(pop_sample_batches)
-            target_fitness = np.mean([episode[SampleBatch.REWARDS].sum(
-            ) for episode in flatten_batches(target_sample_batches)])
+            target_fitness = np.mean([
+                episode[SampleBatch.REWARDS].sum()
+                for episode in flatten_batches(target_sample_batches)])
             self.evolver.evolve(fitnesses, target_fitness=target_fitness)
 
             # calculate similarity before target policy updates.
-            action_similarity = self._calc_policy_similarity(pop_sample_batches, max_batch_size=256)
+            action_similarity = self._calc_policy_similarity(
+                pop_sample_batches, max_batch_size=256)
 
         # step 4: sample batches from replay buffer and place them on learner queue
         # Note: training and target network update are happened in learner_thread
@@ -245,7 +247,7 @@ class PaRL:
             num_train_batches/batch_bulk)*batch_bulk
 
         # print("load train batch phase")
-        skip_training=False
+        skip_training = False
         for _ in range(math.ceil(num_train_batches/batch_bulk)):
             logger.info(f"add {num_train_batches} batches to learner thread")
             train_batch = self.local_replay_buffer.sample(
@@ -254,7 +256,7 @@ class PaRL:
             # replay buffer learning start size not meet
             if train_batch is None or len(train_batch) == 0:
                 self.workers.local_worker().set_global_vars(global_vars)
-                skip_training=True
+                skip_training = True
                 break
 
             # target agent is updated at background thread
@@ -275,7 +277,8 @@ class PaRL:
         if skip_training:
             train_results = {}
         else:
-            train_results = self._retrieve_trained_results(real_num_train_batches)
+            train_results = self._retrieve_trained_results(
+                real_num_train_batches)
 
         if self.pop_size > 0:
             # (optional step): callback of evolver
