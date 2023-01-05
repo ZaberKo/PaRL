@@ -99,7 +99,7 @@ def main(config):
     with open(os.path.join("results", exp_name), "wb") as f:
         cloudpickle.dump(result_grid, f)
 
-    time.sleep(20)
+    time.sleep(60)
 
 
     # trainer=PaRL_TD3_PureEA(config=merged_config)

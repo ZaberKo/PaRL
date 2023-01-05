@@ -91,7 +91,7 @@ def main(config, debug=False):
         with open(os.path.join("results", exp_name), "wb") as f:
             cloudpickle.dump(result_grid, f)
 
-    time.sleep(20)
+    time.sleep(60)
 
 
 if __name__ == "__main__":
